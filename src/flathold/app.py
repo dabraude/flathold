@@ -3,7 +3,7 @@
 import streamlit as st
 
 from flathold.bank_delta import read_existing_table
-from flathold.ledger_delta import update_ledger_from_bank
+from flathold.ledger_delta import recreate_ledger_from_bank, update_ledger_from_bank
 
 st.set_page_config(page_title="Flathold", page_icon="🏦", layout="wide")
 
@@ -20,13 +20,24 @@ with st.sidebar:
             st.success(result.message)
         else:
             st.error(result.message)
+    if st.button(
+        "Recreate ledger",
+        help="Delete the ledger table and rebuild it from scratch from bank data",
+        key="main_recreate_ledger",
+    ):
+        with st.spinner("Recreating ledger…"):
+            result = recreate_ledger_from_bank()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
 
 st.title("🏦 Flathold")
 st.caption("Bank statements and data")
 
 st.markdown(
     "Use the sidebar to open **Upload statements** (CSV → Delta with deduplication) "
-    "or **View data**."
+    "or **View ledger**."
 )
 
 existing = read_existing_table()

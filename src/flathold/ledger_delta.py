@@ -1,6 +1,7 @@
 """Build and maintain a ledger Delta table from the bank table, with stable IDs per transaction."""
 
 import hashlib
+import shutil
 from dataclasses import dataclass
 
 import polars as pl
@@ -36,6 +37,34 @@ def _row_sha256(rows: pl.Series) -> pl.Series:
     return pl.Series([hashlib.sha256(s.encode("utf-8")).hexdigest() for s in rows])
 
 
+def _build_ledger_from_bank_df(bank: pl.DataFrame) -> pl.DataFrame:
+    """Build ledger from bank table; year, month, day from Transaction Date."""
+    ordered = bank.sort(["Transaction Date", "Transaction Counter"])
+    if "month" in ordered.columns:
+        ordered = ordered.drop("month")
+    date_parsed = pl.col("Transaction Date").str.to_date("%d/%m/%Y")
+    ordered = ordered.with_columns(
+        date_parsed.dt.year().alias("year"),
+        date_parsed.dt.month().alias("month"),
+        date_parsed.dt.day().alias("day"),
+    )
+    sorted_cols = sorted(ordered.columns)
+    row_str = pl.concat_str(
+        [
+            pl.concat_str([pl.lit(f"{c}="), pl.col(c).cast(pl.Utf8).fill_null("")])
+            for c in sorted_cols
+        ],
+        separator="|",
+    )
+    ids = row_str.map_batches(_row_sha256)
+    ledger = ordered.with_columns(ids.alias("id")).with_columns(
+        pl.lit("").alias("Counter Party"),
+        pl.lit("").alias("Item"),
+        pl.Series("tags", [[] for _ in range(ordered.height)]).cast(pl.List(pl.Utf8)),
+    )
+    return ledger
+
+
 def update_ledger_from_bank() -> UpdateLedgerResult:
     """
     Rebuild the ledger table from the current bank table, assigning a stable id per
@@ -48,25 +77,24 @@ def update_ledger_from_bank() -> UpdateLedgerResult:
             success=False,
             message="No bank data to build ledger from. Upload statements first.",
         )
-    ordered = bank.sort(["Transaction Date", "Transaction Counter"])
-    # Canonical row string: col1=val1|col2=val2|... with columns in sorted order, nulls as ""
-    sorted_cols = sorted(ordered.columns)
-    row_str = pl.concat_str(
-        [
-            pl.concat_str([pl.lit(f"{c}="), pl.col(c).cast(pl.Utf8).fill_null("")])
-            for c in sorted_cols
-        ],
-        separator="|",
-    )
-    ids = row_str.map_batches(_row_sha256)
-    ledger = ordered.with_columns(ids.alias("id"))
+    ledger = _build_ledger_from_bank_df(bank)
     write_deltalake(
         str(LEDGER_TABLE),
         ledger.to_arrow(),
         mode="overwrite",
-        partition_by=["month"],
+        partition_by=["year", "month"],
     )
     return UpdateLedgerResult(
         success=True,
         message=f"Ledger updated: {len(ledger)} transactions with stable SHA-256 ids.",
     )
+
+
+def recreate_ledger_from_bank() -> UpdateLedgerResult:
+    """
+    Delete the ledger table completely and recreate it from the current bank table.
+    Use when you want a fresh ledger (e.g. after schema or id logic changes).
+    """
+    if LEDGER_TABLE.exists():
+        shutil.rmtree(LEDGER_TABLE)
+    return update_ledger_from_bank()

@@ -7,7 +7,7 @@ from flathold.bank_delta import (
     read_existing_table,
     save_to_delta,
 )
-from flathold.ledger_delta import update_ledger_from_bank
+from flathold.ledger_delta import recreate_ledger_from_bank, update_ledger_from_bank
 
 with st.sidebar:
     st.caption("Ledger")
@@ -18,6 +18,17 @@ with st.sidebar:
     ):
         with st.spinner("Updating ledger…"):
             result = update_ledger_from_bank()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
+    if st.button(
+        "Recreate ledger",
+        help="Delete the ledger table and rebuild it from scratch from bank data",
+        key="upload_recreate_ledger",
+    ):
+        with st.spinner("Recreating ledger…"):
+            result = recreate_ledger_from_bank()
         if result.success:
             st.success(result.message)
         else:
