@@ -12,3 +12,5 @@ wheels/
 # Uploaded data
 data/
 db/
+
+__marimo__/
