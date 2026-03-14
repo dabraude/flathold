@@ -21,3 +21,5 @@ dependencies = [
     "streamlit-autorefresh>=0.0.1",
 ]
 
+[project.scripts]
+flathold = "flathold.__main__:main"

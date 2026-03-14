@@ -1,11 +1,19 @@
 """Load bank statement CSV into a Delta table."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
 from deltalake import write_deltalake
 
 from flathold.constants import BANK_TABLE
+
+
+@dataclass(frozen=True, slots=True)
+class SaveResult:
+    total: int
+    new_rows: int
+    duplicated: int
 
 # Columns that identify a transaction (used to avoid re-adding ones already in the table)
 _DEDUP_COLS = [
@@ -77,15 +85,19 @@ def _add_month_partition(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def save_to_delta(df: pl.DataFrame) -> int:
-    """Merge upload with existing table, skip transactions already present. Returns total row count."""
+def save_to_delta(df: pl.DataFrame) -> SaveResult:
+    """Merge upload with existing table, skip transactions already present."""
     ensure_db_dir()
     existing = read_existing_table()
+    existing_count = len(existing) if existing is not None else 0
     df = df.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
     df = _add_month_partition(df)
     if existing is not None:
         existing = existing.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
     combined = pl.concat([existing, df]) if existing is not None else df
     combined = combined.unique(subset=_DEDUP_COLS, keep="first")
+    total = len(combined)
+    new_rows = total - existing_count
+    duplicated = len(df) - new_rows
     write_deltalake(str(BANK_TABLE), combined.to_arrow(), mode="overwrite", partition_by=["month"])
-    return len(combined)
+    return SaveResult(total=total, new_rows=new_rows, duplicated=duplicated)

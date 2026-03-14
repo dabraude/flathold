@@ -22,9 +22,10 @@ if uploaded is not None:
     try:
         df = load_csv_bytes_to_dataframe(uploaded.read())
         with st.spinner("Saving…"):
-            stored = save_to_delta(df)
+            result = save_to_delta(df)
 
-        st.success(f"Done. **{stored}** rows saved.")
+        msg = f"Done. **{len(df)}** rows in file → **{result.new_rows}** added, **{result.duplicated}** duplicated (skipped). **{result.total}** total in table."
+        st.success(msg)
     except Exception as e:
         st.error(f"Upload failed: {e}")
         raise
