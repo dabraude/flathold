@@ -7,6 +7,21 @@ from flathold.bank_delta import (
     read_existing_table,
     save_to_delta,
 )
+from flathold.ledger_delta import update_ledger_from_bank
+
+with st.sidebar:
+    st.caption("Ledger")
+    if st.button(
+        "Update ledger",
+        help="Rebuild the ledger table from bank data (adds ids to each transaction)",
+        key="upload_update_ledger",
+    ):
+        with st.spinner("Updating ledger…"):
+            result = update_ledger_from_bank()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
 
 st.title("📤 Upload bank statements")
 st.markdown("Upload a CSV bank statement. It is stored in a Delta table.")
@@ -24,7 +39,10 @@ if uploaded is not None:
         with st.spinner("Saving…"):
             result = save_to_delta(df)
 
-        msg = f"Done. **{len(df)}** rows in file → **{result.new_rows}** added, **{result.duplicated}** duplicated (skipped). **{result.total}** total in table."
+        msg = (
+            f"Done. **{len(df)}** rows in file → **{result.new_rows}** added, "
+            f"**{result.duplicated}** duplicated (skipped). **{result.total}** total in table."
+        )
         st.success(msg)
     except Exception as e:
         st.error(f"Upload failed: {e}")

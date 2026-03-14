@@ -6,4 +6,4 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DB_DIR = _PROJECT_ROOT / "db"
 BANK_TABLE = DB_DIR / "bank"
-
+LEDGER_TABLE = DB_DIR / "ledger"

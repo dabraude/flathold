@@ -23,3 +23,32 @@ dependencies = [
 
 [project.scripts]
 flathold = "flathold.__main__:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "W",      # pycodestyle warnings
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "PL",     # Pylint
+    "RUF",    # Ruff-specific rules
+]
+
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0.0",
+    "pyright>=1.1.408",
+    "ruff>=0.15.6",
+]

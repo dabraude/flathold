@@ -4,8 +4,36 @@ import polars as pl
 import streamlit as st
 
 from flathold.bank_delta import read_existing_table
+from flathold.ledger_delta import update_ledger_from_bank
 
-MONTH_NAMES = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+with st.sidebar:
+    st.caption("Ledger")
+    if st.button(
+        "Update ledger",
+        help="Rebuild the ledger table from bank data (adds ids to each transaction)",
+        key="view_update_ledger",
+    ):
+        with st.spinner("Updating ledger…"):
+            result = update_ledger_from_bank()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
+
+MONTH_NAMES = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
 
 
 def _month_label(ym: str) -> str:
@@ -18,7 +46,9 @@ st.title("📋 View statements")
 existing = read_existing_table()
 
 if existing is None or len(existing) == 0:
-    st.info("No data in the Delta table yet. Upload a CSV on the **Upload statements** page.")
+    st.info(
+        "No data in the Delta table yet. Upload a CSV on the **Upload statements** page."
+    )
     st.stop()
 
 # Tabs: year → month
@@ -32,8 +62,7 @@ for i, year in enumerate(years_sorted):
         month_tabs = st.tabs([_month_label(m) for m in year_months])
         for j, month in enumerate(year_months):
             with month_tabs[j]:
-                subset = (
-                    existing.filter(pl.col("month") == month)
-                    .sort(["Transaction Date", "Transaction Counter"])
+                subset = existing.filter(pl.col("month") == month).sort(
+                    ["Transaction Date", "Transaction Counter"]
                 )
                 st.dataframe(subset, width="stretch", height=400)
