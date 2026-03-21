@@ -42,6 +42,7 @@ TAG_RULES: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)(HYPEROPTIC\s+DD|octopus\s+energy)"),
         amount_proportion=1,
+        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="natwest",
@@ -63,6 +64,7 @@ TAG_RULES: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK)"),
         amount_proportion=1,
+        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="kitchen",
@@ -92,6 +94,7 @@ TAG_RULES: tuple[TagRule, ...] = (
             r"(?i)(DISNEY\s+PLUS|netflix\.com|Google\s+YouTubePrem)"
         ),
         amount_proportion=1,
+        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="dish-washer-tablets",
@@ -116,3 +119,11 @@ if len(_rule_tags) != len(set(_rule_tags)):
     raise ValueError(msg)
 for r in TAG_RULES:
     validate_kebab_tag(r.tag)
+
+
+def tag_show_on_dashboard_default(tag: str) -> bool:
+    """Return whether ``tag`` is selected by default on the dashboard (from ``TAG_RULES``)."""
+    for rule in TAG_RULES:
+        if rule.tag == tag:
+            return rule.show_on_dashboard_by_default
+    return False

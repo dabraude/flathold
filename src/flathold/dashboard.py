@@ -14,6 +14,7 @@ from flathold.ledger_delta import (
     update_ledger_from_bank,
     update_transaction_tags,
 )
+from flathold.tag_rules import tag_show_on_dashboard_default
 
 st.set_page_config(page_title="Dashboard", page_icon="🏦", layout="wide")
 
@@ -148,23 +149,22 @@ ytd_lo, ytd_hi = _clamp_range(
     period_max,
 )
 
-shortcut_cols = st.columns(4)
+shortcut_cols = st.columns(5)
 with shortcut_cols[0]:
     if st.button("Last 3 months", key="shortcut_last_3m", use_container_width=True):
         st.session_state.dashboard_date_range = (last_3_lo, last_3_hi)
-        st.rerun()
 with shortcut_cols[1]:
     if st.button("Last 6 months", key="shortcut_last_6m", use_container_width=True):
         st.session_state.dashboard_date_range = (last_6_lo, last_6_hi)
-        st.rerun()
 with shortcut_cols[2]:
     if st.button("Last year", key="shortcut_last_year", use_container_width=True):
         st.session_state.dashboard_date_range = (last_year_lo, last_year_hi)
-        st.rerun()
 with shortcut_cols[3]:
     if st.button("Year to date", key="shortcut_ytd", use_container_width=True):
         st.session_state.dashboard_date_range = (ytd_lo, ytd_hi)
-        st.rerun()
+with shortcut_cols[4]:
+    if st.button("All time", key="shortcut_all_time", use_container_width=True):
+        st.session_state.dashboard_date_range = (period_min, period_max)
 
 date_range_raw = st.date_input(
     "Date range",
@@ -226,11 +226,34 @@ if not all_tags_in_range:
     st.warning("No tagged allocations in this date range.")
     st.stop()
 
+default_tags = [t for t in all_tags_in_range if tag_show_on_dashboard_default(t)]
+if not default_tags:
+    default_tags = list(all_tags_in_range)
+
+if "dashboard_tags" not in st.session_state:
+    st.session_state.dashboard_tags = list(default_tags)
+
+# Apply "Defaults" before the multiselect is created — cannot assign `dashboard_tags` after
+# the widget with that key is instantiated (StreamlitAPIException).
+if st.session_state.pop("_apply_dashboard_tag_defaults", False):
+    st.session_state.dashboard_tags = list(default_tags)
+
+# Keep the user's tag selection when the date range changes; drop tags not in this range.
+# If nothing remains (cleared selection or no overlap with the new range), keep [] — do not
+# substitute rule defaults, or clearing the multiselect would immediately repopulate.
+_tags_valid = [t for t in st.session_state.dashboard_tags if t in all_tags_in_range]
+st.session_state.dashboard_tags = _tags_valid
+
 selected = st.multiselect(
     "Tags to show",
     options=all_tags_in_range,
-    default=all_tags_in_range,
-    help="Monthly sum of allocation per tag (from tag rules).",
+    key="dashboard_tags",
+    help=(
+        "Monthly sum of allocation per tag. Initial selection uses each rule's "
+        "`show_on_dashboard_by_default` in tag_rules/rules.py. "
+        "Selection is kept when you change the date range (tags not in range are removed). "
+        "If none remain, the chart stays empty until you pick tags or use Defaults."
+    ),
 )
 
 if not selected:
@@ -251,7 +274,22 @@ chart_df = chart_df.select(["period", *selected])
 if chart_df.is_empty():
     st.info("No data points for the selected tags in this range.")
     st.stop()
-st.line_chart(chart_df, x="period", y=selected, width="stretch")
+
+chart_col, reset_col = st.columns([6, 1], vertical_alignment="center")
+with chart_col:
+    st.line_chart(chart_df, x="period", y=selected, width="stretch")
+with reset_col:
+
+    def _request_dashboard_tag_defaults() -> None:
+        st.session_state["_apply_dashboard_tag_defaults"] = True
+
+    st.button(
+        "Defaults",
+        key="dashboard_tags_reset_defaults",
+        help="Reset tag selection to rule defaults for this date range.",
+        use_container_width=True,
+        on_click=_request_dashboard_tag_defaults,
+    )
 
 bank = read_existing_table()
 if bank is not None and len(bank) > 0:

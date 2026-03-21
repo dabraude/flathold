@@ -10,7 +10,7 @@ from flathold.tag_rules.core import (
 from flathold.tag_rules.core import (
     apply_tag_rules as apply_tag_rules_impl,
 )
-from flathold.tag_rules.rules import TAG_RULES
+from flathold.tag_rules.rules import TAG_RULES, tag_show_on_dashboard_default
 
 
 def apply_tag_rules(ledger: pl.DataFrame) -> pl.DataFrame:
@@ -23,5 +23,6 @@ __all__ = [
     "TAG_RULES",
     "TagRule",
     "apply_tag_rules",
+    "tag_show_on_dashboard_default",
     "validate_kebab_tag",
 ]

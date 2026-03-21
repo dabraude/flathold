@@ -23,12 +23,16 @@ class TagRule:
 
     Allocation is ``amount_absolute + amount_proportion * line_amount`` where ``line_amount`` is
     ``Debit Amount + Credit Amount`` on the matched ledger row.
+
+    ``show_on_dashboard_by_default`` controls the dashboard tag multiselect initial selection for
+    this tag (tags not listed in rules default to False).
     """
 
     tag: str
     predicate: pl.Expr
     amount_absolute: float = 0.0
     amount_proportion: float = 0.0
+    show_on_dashboard_by_default: bool = False
 
 
 def _rule_allocation_expr(rule: TagRule) -> pl.Expr:
