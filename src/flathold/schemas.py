@@ -36,4 +36,10 @@ class LedgerSchema(pa.DataFrameModel):
     day: int = pa.Field()
     counter_party: str = pa.Field(alias="Counter Party")
     item: str = pa.Field(alias="Item")
-    tags: list = pa.Field()
+
+
+class TransactionTagsSchema(pa.DataFrameModel):
+    """One row per tag on a ledger transaction (`id` matches ledger `id`)."""
+
+    id: str = pa.Field()
+    tag: str = pa.Field()

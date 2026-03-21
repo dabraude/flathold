@@ -8,7 +8,7 @@ import polars as pl
 from deltalake import write_deltalake
 
 from flathold.bank_delta import read_existing_table
-from flathold.constants import LEDGER_TABLE
+from flathold.constants import LEDGER_TABLE, TRANSACTION_TAGS_TABLE
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,7 +17,7 @@ class UpdateLedgerResult:
     message: str
 
 
-def read_ledger_table() -> pl.DataFrame | None:
+def _read_ledger_delta_only() -> pl.DataFrame | None:
     """Read the ledger Delta table if it exists. Returns None if missing."""
     if not LEDGER_TABLE.exists():
         return None
@@ -25,6 +25,43 @@ def read_ledger_table() -> pl.DataFrame | None:
         return pl.read_delta(str(LEDGER_TABLE))
     except Exception:
         return None
+
+
+def _read_transaction_tags_raw() -> pl.DataFrame | None:
+    """Read the transaction tags Delta table if it exists. Returns None if missing."""
+    if not TRANSACTION_TAGS_TABLE.exists():
+        return None
+    try:
+        return pl.read_delta(str(TRANSACTION_TAGS_TABLE))
+    except Exception:
+        return None
+
+
+def _ledger_with_tags_left_join(ledger: pl.DataFrame) -> pl.DataFrame:
+    """Attach `tags` (list[str]) via left join; rows with no tags get an empty list."""
+    if "tags" in ledger.columns:
+        ledger = ledger.drop("tags")
+    tags_df = _read_transaction_tags_raw()
+    if tags_df is None or len(tags_df) == 0:
+        return ledger.with_columns(
+            pl.Series("tags", [[] for _ in range(ledger.height)]).cast(pl.List(pl.Utf8))
+        )
+    tags_agg = tags_df.group_by("id").agg(pl.col("tag").implode().alias("tags"))
+    joined = ledger.join(tags_agg, on="id", how="left")
+    return joined.with_columns(
+        pl.when(pl.col("tags").is_null())
+        .then(pl.lit([]).cast(pl.List(pl.Utf8)))
+        .otherwise(pl.col("tags"))
+        .alias("tags")
+    )
+
+
+def read_ledger_table() -> pl.DataFrame | None:
+    """Read the ledger with `tags` from the transaction_tags table (left join, default [])."""
+    ledger = _read_ledger_delta_only()
+    if ledger is None:
+        return None
+    return _ledger_with_tags_left_join(ledger)
 
 
 def ensure_ledger_dir() -> None:
@@ -60,9 +97,25 @@ def _build_ledger_from_bank_df(bank: pl.DataFrame) -> pl.DataFrame:
     ledger = ordered.with_columns(ids.alias("id")).with_columns(
         pl.lit("").alias("Counter Party"),
         pl.lit("").alias("Item"),
-        pl.Series("tags", [[] for _ in range(ordered.height)]).cast(pl.List(pl.Utf8)),
     )
     return ledger
+
+
+def _prune_transaction_tags_to_ledger_ids(ledger_ids: pl.Series) -> None:
+    """Drop tag rows whose `id` is not in the current ledger."""
+    if not TRANSACTION_TAGS_TABLE.exists():
+        return
+    tags = pl.read_delta(str(TRANSACTION_TAGS_TABLE))
+    valid = set(ledger_ids.to_list())
+    pruned = tags.filter(pl.col("id").is_in(list(valid)))
+    if len(pruned) == 0:
+        shutil.rmtree(TRANSACTION_TAGS_TABLE)
+        return
+    write_deltalake(
+        str(TRANSACTION_TAGS_TABLE),
+        pruned.to_arrow(),
+        mode="overwrite",
+    )
 
 
 def update_ledger_from_bank() -> UpdateLedgerResult:
@@ -84,6 +137,7 @@ def update_ledger_from_bank() -> UpdateLedgerResult:
         mode="overwrite",
         partition_by=["year", "month"],
     )
+    _prune_transaction_tags_to_ledger_ids(ledger["id"])
     return UpdateLedgerResult(
         success=True,
         message=f"Ledger updated: {len(ledger)} transactions with stable SHA-256 ids.",
@@ -97,4 +151,6 @@ def recreate_ledger_from_bank() -> UpdateLedgerResult:
     """
     if LEDGER_TABLE.exists():
         shutil.rmtree(LEDGER_TABLE)
+    if TRANSACTION_TAGS_TABLE.exists():
+        shutil.rmtree(TRANSACTION_TAGS_TABLE)
     return update_ledger_from_bank()
