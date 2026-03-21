@@ -66,9 +66,7 @@ if existing is None or len(existing) == 0:
     st.stop()
 
 # Tabs: year → month (ledger has year, month columns)
-year_month = (
-    existing.select(["year", "month"]).unique().sort(["year", "month"])
-)
+year_month = existing.select(["year", "month"]).unique().sort(["year", "month"])
 years_sorted = year_month["year"].unique().to_list()
 
 year_tabs = st.tabs([str(y) for y in years_sorted])

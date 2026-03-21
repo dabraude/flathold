@@ -48,15 +48,10 @@ def _ensure_float_debit_credit(df: pl.DataFrame) -> pl.DataFrame:
     """Cast Debit Amount and Credit Amount to Float64 and fill nulls with 0.0."""
     updates = []
     if "Debit Amount" in df.columns:
-        updates.append(
-            pl.col("Debit Amount").cast(pl.Float64).fill_null(0.0).alias("Debit Amount")
-        )
+        updates.append(pl.col("Debit Amount").cast(pl.Float64).fill_null(0.0).alias("Debit Amount"))
     if "Credit Amount" in df.columns:
         updates.append(
-            pl.col("Credit Amount")
-            .cast(pl.Float64)
-            .fill_null(0.0)
-            .alias("Credit Amount")
+            pl.col("Credit Amount").cast(pl.Float64).fill_null(0.0).alias("Credit Amount")
         )
     if not updates:
         return df
@@ -69,9 +64,7 @@ def _normalize(df: pl.DataFrame) -> pl.DataFrame:
     df = df.rename({c: c.strip() for c in df.columns})
     # Sort Code sometimes has a leading single quote in the CSV
     if "Sort Code" in df.columns:
-        df = df.with_columns(
-            pl.col("Sort Code").str.strip_chars("'").alias("Sort Code")
-        )
+        df = df.with_columns(pl.col("Sort Code").str.strip_chars("'").alias("Sort Code"))
     df = _ensure_float_debit_credit(df)
     return _add_transaction_counter(df)
 
@@ -107,10 +100,7 @@ def read_existing_table() -> pl.DataFrame | None:
 def _add_month_partition(df: pl.DataFrame) -> pl.DataFrame:
     """Add month column (YYYY-MM) from Transaction Date for partitioning."""
     return df.with_columns(
-        pl.col("Transaction Date")
-        .str.to_date("%d/%m/%Y")
-        .dt.strftime("%Y-%m")
-        .alias("month")
+        pl.col("Transaction Date").str.to_date("%d/%m/%Y").dt.strftime("%Y-%m").alias("month")
     )
 
 
@@ -129,7 +119,5 @@ def save_to_delta(df: pl.DataFrame) -> SaveResult:
     total = len(combined)
     new_rows = total - existing_count
     duplicated = len(df) - new_rows
-    write_deltalake(
-        str(BANK_TABLE), combined.to_arrow(), mode="overwrite", partition_by=["month"]
-    )
+    write_deltalake(str(BANK_TABLE), combined.to_arrow(), mode="overwrite", partition_by=["month"])
     return SaveResult(total=total, new_rows=new_rows, duplicated=duplicated)
