@@ -41,7 +41,8 @@ class LedgerSchema(pa.DataFrameModel):
 
 
 class TransactionTagsSchema(pa.DataFrameModel):
-    """One row per unique (id, tag) pair on a ledger transaction."""
+    """One row per tag on a ledger transaction; (id, tag) is unique (no duplicate tags per txn)."""
 
     id: str = pa.Field()
     tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
+    allocation: float = pa.Field()

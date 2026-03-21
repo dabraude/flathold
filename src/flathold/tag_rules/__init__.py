@@ -1,0 +1,27 @@
+"""Tag rules: validation, `TagRule`, and applying rules to ledger rows."""
+
+import polars as pl
+
+from flathold.tag_rules.core import (
+    KEBAB_TAG_PATTERN,
+    TagRule,
+    validate_kebab_tag,
+)
+from flathold.tag_rules.core import (
+    apply_tag_rules as apply_tag_rules_impl,
+)
+from flathold.tag_rules.rules import TAG_RULES
+
+
+def apply_tag_rules(ledger: pl.DataFrame) -> pl.DataFrame:
+    """Apply `TAG_RULES` from `flathold.tag_rules.rules`."""
+    return apply_tag_rules_impl(ledger, TAG_RULES)
+
+
+__all__ = [
+    "KEBAB_TAG_PATTERN",
+    "TAG_RULES",
+    "TagRule",
+    "apply_tag_rules",
+    "validate_kebab_tag",
+]

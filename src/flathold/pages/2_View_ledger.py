@@ -38,7 +38,7 @@ with st.sidebar:
     st.caption("Tags")
     if st.button(
         "Update tags",
-        help="Apply hard-coded rules in tag_rules.py and replace all transaction tags",
+        help="Apply hard-coded rules in tag_rules/rules.py and replace all transaction tags",
         key="view_update_tags",
     ):
         with st.spinner("Updating tags…"):

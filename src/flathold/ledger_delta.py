@@ -35,18 +35,25 @@ def _read_ledger_delta_only() -> pl.DataFrame | None:
         return None
 
 
+def _normalize_transaction_tags_df(df: pl.DataFrame) -> pl.DataFrame:
+    """Fill in columns expected by `TransactionTagsSchema` (legacy tables may omit allocation)."""
+    if "allocation" not in df.columns:
+        return df.with_columns(pl.lit(0.0).alias("allocation"))
+    return df
+
+
 def _read_transaction_tags_raw() -> pl.DataFrame | None:
     """Read the transaction tags Delta table if it exists. Returns None if missing."""
     if not TRANSACTION_TAGS_TABLE.exists():
         return None
     try:
-        return pl.read_delta(str(TRANSACTION_TAGS_TABLE))
+        return _normalize_transaction_tags_df(pl.read_delta(str(TRANSACTION_TAGS_TABLE)))
     except Exception:
         return None
 
 
 def _ledger_with_tags_left_join(ledger: pl.DataFrame) -> pl.DataFrame:
-    """Attach `tags` (list[str]) via left join; rows with no tags get an empty list."""
+    """Attach `tags` (list[str]) via left join; allocation stays on transaction_tags only."""
     if "tags" in ledger.columns:
         ledger = ledger.drop("tags")
     tags_df = _read_transaction_tags_raw()
@@ -65,7 +72,7 @@ def _ledger_with_tags_left_join(ledger: pl.DataFrame) -> pl.DataFrame:
 
 
 def read_ledger_table() -> pl.DataFrame | None:
-    """Read the ledger with `tags` from the transaction_tags table (left join, default [])."""
+    """Read ledger with `tags` from transaction_tags (left join, default [])."""
     ledger = _read_ledger_delta_only()
     if ledger is None:
         return None
@@ -117,7 +124,7 @@ def _assert_unique_id_tag_pairs(df: pl.DataFrame) -> None:
 
 
 def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
-    """Persist id/tag rows; empty input removes the table."""
+    """Persist one row per (id, tag, allocation); empty input removes the table."""
     if len(tags_df) == 0:
         if TRANSACTION_TAGS_TABLE.exists():
             shutil.rmtree(TRANSACTION_TAGS_TABLE)
@@ -133,7 +140,7 @@ def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
 
 
 def update_transaction_tags() -> UpdateTagsResult:
-    """Replace transaction tags with tags derived from `tag_rules.TAG_RULES`."""
+    """Replace transaction tags with tags derived from `tag_rules.rules.TAG_RULES`."""
     ledger = _read_ledger_delta_only()
     if ledger is None or len(ledger) == 0:
         return UpdateTagsResult(
@@ -160,7 +167,7 @@ def _prune_transaction_tags_to_ledger_ids(ledger_ids: pl.Series) -> None:
     """Drop tag rows whose `id` is not in the current ledger."""
     if not TRANSACTION_TAGS_TABLE.exists():
         return
-    tags = pl.read_delta(str(TRANSACTION_TAGS_TABLE))
+    tags = _normalize_transaction_tags_df(pl.read_delta(str(TRANSACTION_TAGS_TABLE)))
     valid = set(ledger_ids.to_list())
     pruned = tags.filter(pl.col("id").is_in(list(valid)))
     if len(pruned) == 0:
