@@ -30,6 +30,48 @@ TAG_RULES: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
+        tag="hyperoptic",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)HYPEROPTIC\s+DD"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="utilities",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)(HYPEROPTIC\s+DD|octopus\s+energy)"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="natwest",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)NATWEST\s+BANK"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="mortgage",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)NATWEST\s+BANK"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="bank",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK)"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="kitchen",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)CREATION\.CO\.UK"),
+        amount_proportion=1,
+    ),
+    TagRule(
         tag="disney",
         predicate=pl.col("Transaction Description").str.contains(r"(?i)DISNEY\s+PLUS"),
         amount_proportion=1,
@@ -40,9 +82,14 @@ TAG_RULES: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
+        tag="youtube-premium",
+        predicate=pl.col("Transaction Description").str.contains(r"(?i)Google\s+YouTubePrem"),
+        amount_proportion=1,
+    ),
+    TagRule(
         tag="entertainment",
         predicate=pl.col("Transaction Description").str.contains(
-            r"(?i)(DISNEY\s+PLUS|netflix\.com)"
+            r"(?i)(DISNEY\s+PLUS|netflix\.com|Google\s+YouTubePrem)"
         ),
         amount_proportion=1,
     ),

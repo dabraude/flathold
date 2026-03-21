@@ -79,6 +79,11 @@ def read_ledger_table() -> pl.DataFrame | None:
     return _ledger_with_tags_left_join(ledger)
 
 
+def read_transaction_tags_table() -> pl.DataFrame | None:
+    """Read the transaction_tags Delta table if it exists; otherwise None."""
+    return _read_transaction_tags_raw()
+
+
 def ensure_ledger_dir() -> None:
     """Create the ledger directory if it does not exist."""
     LEDGER_TABLE.parent.mkdir(parents=True, exist_ok=True)

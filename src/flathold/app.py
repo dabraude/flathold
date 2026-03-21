@@ -1,47 +1,28 @@
-"""Flathold Streamlit app — multi-page bank statement and data management."""
+"""Streamlit entrypoint — `st.navigation` sets sidebar labels (e.g. Dashboard)."""
+
+from pathlib import Path
 
 import streamlit as st
 
-from flathold.bank_delta import read_existing_table
-from flathold.ledger_delta import recreate_ledger_from_bank, update_ledger_from_bank
+_ROOT = Path(__file__).resolve().parent
 
-st.set_page_config(page_title="Flathold", page_icon="🏦", layout="wide")
-
-with st.sidebar:
-    st.caption("Ledger")
-    if st.button(
-        "Update ledger",
-        help="Rebuild the ledger table from bank data (adds ids to each transaction)",
-        key="main_update_ledger",
-    ):
-        with st.spinner("Updating ledger…"):
-            result = update_ledger_from_bank()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-    if st.button(
-        "Recreate ledger",
-        help="Delete the ledger table and rebuild it from scratch from bank data",
-        key="main_recreate_ledger",
-    ):
-        with st.spinner("Recreating ledger…"):
-            result = recreate_ledger_from_bank()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-
-st.title("🏦 Flathold")
-st.caption("Bank statements and data")
-
-st.markdown(
-    "Use the sidebar to open **Upload statements** (CSV → Delta with deduplication) "
-    "or **View ledger**."
+dashboard_page = st.Page(
+    _ROOT / "dashboard.py",
+    title="Dashboard",
+    icon="🏦",
+    default=True,
+)
+upload_page = st.Page(
+    _ROOT / "upload_statements.py",
+    title="Upload statements",
+    icon="📤",
+)
+ledger_page = st.Page(
+    _ROOT / "view_ledger.py",
+    title="View ledger",
+    icon="📋",
 )
 
-existing = read_existing_table()
-if existing is not None and len(existing) > 0:
-    st.info(f"Delta table currently has **{len(existing)}** transactions.")
-else:
-    st.info("No data in the Delta table yet. Go to **Upload statements** to add a CSV.")
+pg = st.navigation([dashboard_page, upload_page, ledger_page])
+st.set_page_config(page_title="Flathold", page_icon="🏦", layout="wide")
+pg.run()

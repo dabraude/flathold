@@ -9,6 +9,8 @@ from flathold.bank_delta import (
 )
 from flathold.ledger_delta import recreate_ledger_from_bank, update_ledger_from_bank
 
+st.set_page_config(page_title="Upload statements", page_icon="📤", layout="wide")
+
 with st.sidebar:
     st.caption("Ledger")
     if st.button(

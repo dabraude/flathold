@@ -11,6 +11,8 @@ from flathold.ledger_delta import (
     update_transaction_tags,
 )
 
+st.set_page_config(page_title="View ledger", page_icon="📋", layout="wide")
+
 with st.sidebar:
     st.caption("Ledger")
     if st.button(
