@@ -4,9 +4,11 @@ import polars as pl
 import streamlit as st
 
 from flathold.ledger_delta import (
+    clear_transaction_tags,
     read_ledger_table,
     recreate_ledger_from_bank,
     update_ledger_from_bank,
+    update_transaction_tags,
 )
 
 with st.sidebar:
@@ -29,6 +31,29 @@ with st.sidebar:
     ):
         with st.spinner("Recreating ledger…"):
             result = recreate_ledger_from_bank()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
+    st.caption("Tags")
+    if st.button(
+        "Update tags",
+        help="Apply hard-coded rules in tag_rules.py and replace all transaction tags",
+        key="view_update_tags",
+    ):
+        with st.spinner("Updating tags…"):
+            result = update_transaction_tags()
+        if result.success:
+            st.success(result.message)
+        else:
+            st.error(result.message)
+    if st.button(
+        "Clear tags",
+        help="Delete all transaction tags (rules are not applied)",
+        key="view_clear_tags",
+    ):
+        with st.spinner("Clearing tags…"):
+            result = clear_transaction_tags()
         if result.success:
             st.success(result.message)
         else:
@@ -76,6 +101,12 @@ if existing is None or len(existing) == 0:
     )
     st.stop()
 
+only_untagged = st.checkbox(
+    "Only transactions without tags",
+    help="Hide rows that have at least one tag",
+    key="view_ledger_only_untagged",
+)
+
 # Tabs: year → month (ledger has year, month columns)
 year_month = existing.select(["year", "month"]).unique().sort(["year", "month"])
 years_sorted = year_month["year"].unique().to_list()
@@ -87,9 +118,10 @@ for i, year in enumerate(years_sorted):
         month_tabs = st.tabs([_month_label(m) for m in months_in_year])
         for j, month_num in enumerate(months_in_year):
             with month_tabs[j]:
-                subset = existing.filter(
-                    (pl.col("year") == year) & (pl.col("month") == month_num)
-                ).sort(["Transaction Date", "Transaction Counter"])
+                subset = existing.filter((pl.col("year") == year) & (pl.col("month") == month_num))
+                if only_untagged:
+                    subset = subset.filter(pl.col("tags").list.len() == 0)
+                subset = subset.sort(["Transaction Date", "Transaction Counter"])
                 st.dataframe(
                     _ledger_columns_tags_second(subset),
                     width="stretch",

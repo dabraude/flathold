@@ -2,6 +2,8 @@
 
 import pandera.polars as pa
 
+from flathold.tag_rules import KEBAB_TAG_PATTERN
+
 
 class BankSchema(pa.DataFrameModel):
     """Schema for the bank statement Delta table."""
@@ -39,7 +41,7 @@ class LedgerSchema(pa.DataFrameModel):
 
 
 class TransactionTagsSchema(pa.DataFrameModel):
-    """One row per tag on a ledger transaction (`id` matches ledger `id`)."""
+    """One row per unique (id, tag) pair on a ledger transaction."""
 
     id: str = pa.Field()
-    tag: str = pa.Field()
+    tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)

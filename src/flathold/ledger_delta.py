@@ -9,10 +9,18 @@ from deltalake import write_deltalake
 
 from flathold.bank_delta import read_existing_table
 from flathold.constants import LEDGER_TABLE, TRANSACTION_TAGS_TABLE
+from flathold.schemas import TransactionTagsSchema
+from flathold.tag_rules import apply_tag_rules
 
 
 @dataclass(frozen=True, slots=True)
 class UpdateLedgerResult:
+    success: bool
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateTagsResult:
     success: bool
     message: str
 
@@ -101,6 +109,53 @@ def _build_ledger_from_bank_df(bank: pl.DataFrame) -> pl.DataFrame:
     return ledger
 
 
+def _assert_unique_id_tag_pairs(df: pl.DataFrame) -> None:
+    """Raise if any (id, tag) pair appears more than once."""
+    if len(df) != len(df.unique(subset=["id", "tag"])):
+        msg = "transaction_tags rows must be unique on (id, tag)"
+        raise ValueError(msg)
+
+
+def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
+    """Persist id/tag rows; empty input removes the table."""
+    if len(tags_df) == 0:
+        if TRANSACTION_TAGS_TABLE.exists():
+            shutil.rmtree(TRANSACTION_TAGS_TABLE)
+        return
+    _assert_unique_id_tag_pairs(tags_df)
+    TransactionTagsSchema.validate(tags_df)
+    TRANSACTION_TAGS_TABLE.parent.mkdir(parents=True, exist_ok=True)
+    write_deltalake(
+        str(TRANSACTION_TAGS_TABLE),
+        tags_df.to_arrow(),
+        mode="overwrite",
+    )
+
+
+def update_transaction_tags() -> UpdateTagsResult:
+    """Replace transaction tags with tags derived from `tag_rules.TAG_RULES`."""
+    ledger = _read_ledger_delta_only()
+    if ledger is None or len(ledger) == 0:
+        return UpdateTagsResult(
+            success=False,
+            message="No ledger data. Update the ledger from bank statements first.",
+        )
+    tags_df = apply_tag_rules(ledger)
+    _write_transaction_tags_table(tags_df)
+    n = len(tags_df)
+    return UpdateTagsResult(
+        success=True,
+        message=f"Tags updated: {n} tag row(s) from rules.",
+    )
+
+
+def clear_transaction_tags() -> UpdateTagsResult:
+    """Remove all rows from the transaction tags table."""
+    if TRANSACTION_TAGS_TABLE.exists():
+        shutil.rmtree(TRANSACTION_TAGS_TABLE)
+    return UpdateTagsResult(success=True, message="All transaction tags cleared.")
+
+
 def _prune_transaction_tags_to_ledger_ids(ledger_ids: pl.Series) -> None:
     """Drop tag rows whose `id` is not in the current ledger."""
     if not TRANSACTION_TAGS_TABLE.exists():
@@ -111,11 +166,7 @@ def _prune_transaction_tags_to_ledger_ids(ledger_ids: pl.Series) -> None:
     if len(pruned) == 0:
         shutil.rmtree(TRANSACTION_TAGS_TABLE)
         return
-    write_deltalake(
-        str(TRANSACTION_TAGS_TABLE),
-        pruned.to_arrow(),
-        mode="overwrite",
-    )
+    _write_transaction_tags_table(pruned)
 
 
 def update_ledger_from_bank() -> UpdateLedgerResult:
