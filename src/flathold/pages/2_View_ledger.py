@@ -55,6 +55,17 @@ def _month_label(month_num: int) -> str:
     return MONTH_NAMES[month_num - 1]
 
 
+def _ledger_columns_tags_second(df: pl.DataFrame) -> pl.DataFrame:
+    """Reorder so `tags` is always the second column (first column unchanged)."""
+    cols = df.columns
+    if "tags" not in cols:
+        return df
+    rest = [c for c in cols if c != "tags"]
+    if not rest:
+        return df
+    return df.select([rest[0], "tags", *rest[1:]])
+
+
 st.title("📋 View ledger")
 existing = read_ledger_table()
 
@@ -79,4 +90,8 @@ for i, year in enumerate(years_sorted):
                 subset = existing.filter(
                     (pl.col("year") == year) & (pl.col("month") == month_num)
                 ).sort(["Transaction Date", "Transaction Counter"])
-                st.dataframe(subset, width="stretch", height=400)
+                st.dataframe(
+                    _ledger_columns_tags_second(subset),
+                    width="stretch",
+                    height="stretch",
+                )
