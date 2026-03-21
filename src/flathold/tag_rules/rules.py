@@ -13,6 +13,13 @@ TAG_RULES: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
+        tag="pets",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)^SP YEARS\.COM$"),
+        amount_proportion=1,
+    ),
+    TagRule(
         tag="printer",
         predicate=pl.col("Transaction Description").str.contains("(?i)HPI\\s+INSTANT\\s+INK\\s+UK"),
         amount_proportion=1,
@@ -20,6 +27,37 @@ TAG_RULES: tuple[TagRule, ...] = (
     TagRule(
         tag="gas-and-electricity",
         predicate=pl.col("Transaction Description").str.contains("(?i)octopus\\s+energy"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="disney",
+        predicate=pl.col("Transaction Description").str.contains(r"(?i)DISNEY\s+PLUS"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="netflix",
+        predicate=pl.col("Transaction Description").str.contains(r"(?i)netflix\.com"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="entertainment",
+        predicate=pl.col("Transaction Description").str.contains(
+            r"(?i)(DISNEY\s+PLUS|netflix\.com)"
+        ),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="dish-washer-tablets",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)SMOL\s+LIMITED"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="groceries",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)SMOL\s+LIMITED"),
         amount_proportion=1,
     ),
 )
