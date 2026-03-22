@@ -62,9 +62,16 @@ TAG_RULES: tuple[TagRule, ...] = (
         tag="bank",
         predicate=pl.col("Transaction Description")
         .str.strip_chars()
-        .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK)"),
+        .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK|TOYOTA\s+FIN\s+SERV)"),
         amount_proportion=1,
         show_on_dashboard_by_default=True,
+    ),
+    TagRule(
+        tag="car",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)TOYOTA\s+FIN\s+SERV"),
+        amount_proportion=1,
     ),
     TagRule(
         tag="kitchen",
