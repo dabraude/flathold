@@ -139,6 +139,7 @@ def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
         str(TRANSACTION_TAGS_TABLE),
         tags_df.to_arrow(),
         mode="overwrite",
+        schema_mode="overwrite",
     )
 
 

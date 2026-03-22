@@ -11,6 +11,12 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
+        tag="hp",
+        predicate=pl.col("Transaction Description").str.contains("(?i)HPI\\s+INSTANT\\s+INK\\s+UK"),
+        amount_proportion=1,
+        counter_party=True,
+    ),
+    TagRule(
         tag="gas-and-electricity",
         predicate=pl.col("Transaction Description").str.contains("(?i)octopus\\s+energy"),
         amount_proportion=1,

@@ -107,6 +107,41 @@ def validate_tag_group_allocations(
         raise ValueError(msg)
 
 
+def validate_at_most_one_counter_party_tag_per_transaction(
+    tags_df: pl.DataFrame,
+    rules: tuple[TagRule, ...],
+) -> None:
+    """Raise ValueError if any transaction has more than one tag in the ``counter_party`` group."""
+    if len(tags_df) == 0:
+        return
+    tag_to_groups = {r.tag: r.groups for r in rules}
+    cp_rows: list[tuple[str, str]] = []
+    for row in tags_df.iter_rows(named=True):
+        tag = row["tag"]
+        if "counter_party" in tag_to_groups.get(tag, ()):
+            cp_rows.append((row["id"], tag))
+    if not cp_rows:
+        return
+    exploded = pl.DataFrame(
+        {
+            "id": [r[0] for r in cp_rows],
+            "tag": [r[1] for r in cp_rows],
+        }
+    )
+    by_id = exploded.group_by("id").agg(pl.col("tag").implode().alias("counter_party_tags"))
+    bad = by_id.filter(pl.col("counter_party_tags").list.len() > 1)
+    if len(bad) > 0:
+        sample = bad.head(10)
+        lines = [
+            f"id={r['id']!r} tags={r['counter_party_tags']!r}" for r in sample.iter_rows(named=True)
+        ]
+        msg = (
+            "Each transaction may have at most one tag in the counter_party group; "
+            f"{len(bad)} transaction(s) have more. Examples:\n" + "\n".join(lines)
+        )
+        raise ValueError(msg)
+
+
 def apply_tag_rules(ledger: pl.DataFrame, rules: tuple[TagRule, ...]) -> pl.DataFrame:
     """Return one row per (id, tag) with allocation from each rule's absolute and proportion."""
     empty = pl.DataFrame(
@@ -135,4 +170,5 @@ def apply_tag_rules(ledger: pl.DataFrame, rules: tuple[TagRule, ...]) -> pl.Data
     for t in out["tag"].to_list():
         validate_kebab_tag(t)
     validate_tag_group_allocations(ledger, out, rules)
+    validate_at_most_one_counter_party_tag_per_transaction(out, rules)
     return out

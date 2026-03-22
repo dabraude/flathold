@@ -5,6 +5,7 @@ import polars as pl
 from flathold.tag_rules.core import (
     KEBAB_TAG_PATTERN,
     TagRule,
+    validate_at_most_one_counter_party_tag_per_transaction,
     validate_kebab_tag,
     validate_tag_group_allocations,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "tag_counter_party",
     "tag_groups",
     "tag_show_on_dashboard_default",
+    "validate_at_most_one_counter_party_tag_per_transaction",
     "validate_kebab_tag",
     "validate_tag_group_allocations",
 ]
