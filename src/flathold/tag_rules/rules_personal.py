@@ -19,6 +19,7 @@ TAG_RULES_PERSONAL: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)D\s+BRAUDE"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="us",
@@ -34,6 +35,7 @@ TAG_RULES_PERSONAL: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)CLAIRE\s+GIRY"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="pets",
@@ -83,6 +85,7 @@ TAG_RULES_PERSONAL: tuple[TagRule, ...] = (
         tag="aviva",
         predicate=pl.col("Transaction Description").str.strip_chars().str.contains(r"(?i)AVIVA"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="david-life-insurance",
@@ -122,6 +125,7 @@ TAG_RULES_PERSONAL: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)CLOSE-BORLAND\s+CLIE"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="pet-plan",
@@ -129,5 +133,6 @@ TAG_RULES_PERSONAL: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)PET\s+PLAN\s+LTD"),
         amount_proportion=1,
+        counter_party=True,
     ),
 )

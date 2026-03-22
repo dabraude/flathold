@@ -9,12 +9,9 @@ import streamlit as st
 
 from flathold.bank_delta import read_existing_table
 from flathold.ledger_delta import (
-    clear_transaction_tags,
     read_ledger_table,
     read_transaction_tags_table,
-    recreate_ledger_from_bank,
-    update_ledger_from_bank,
-    update_transaction_tags,
+    refresh_ledger_and_tags,
 )
 from flathold.tag_rules import tag_show_on_dashboard_default
 
@@ -257,48 +254,17 @@ def _tag_bar_chart_pounds(
 
 
 with st.sidebar:
-    st.caption("Ledger")
     if st.button(
-        "Update ledger",
-        help="Rebuild the ledger table from bank data (adds ids to each transaction)",
-        key="main_update_ledger",
+        "Update",
+        help=(
+            "Sync stored tags with current bank data (prune orphans, remove legacy ledger files), "
+            "then reapply tag rules from tag_rules"
+        ),
+        key="main_refresh_ledger_tags",
+        use_container_width=True,
     ):
-        with st.spinner("Updating ledger…"):
-            result = update_ledger_from_bank()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-    if st.button(
-        "Recreate ledger",
-        help="Delete the ledger table and rebuild it from scratch from bank data",
-        key="main_recreate_ledger",
-    ):
-        with st.spinner("Recreating ledger…"):
-            result = recreate_ledger_from_bank()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-    st.caption("Tags")
-    if st.button(
-        "Update tags",
-        help="Apply hard-coded rules in tag_rules/rules.py and replace all transaction tags",
-        key="main_update_tags",
-    ):
-        with st.spinner("Updating tags…"):
-            result = update_transaction_tags()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-    if st.button(
-        "Clear tags",
-        help="Delete all transaction tags (rules are not applied)",
-        key="main_clear_tags",
-    ):
-        with st.spinner("Clearing tags…"):
-            result = clear_transaction_tags()
+        with st.spinner("Updating…"):
+            result = refresh_ledger_and_tags()
         if result.success:
             st.success(result.message)
         else:
@@ -313,10 +279,7 @@ ledger = read_ledger_table()
 tags_df = read_transaction_tags_table()
 
 if ledger is None or len(ledger) == 0:
-    st.info(
-        "No ledger data yet. Upload a CSV on **Upload statements**, then use "
-        "**Update ledger** in the sidebar."
-    )
+    st.info("No bank data yet. Upload a CSV on **Upload statements** to see the dashboard.")
     st.stop()
 
 ledger_periods = ledger.with_columns(
@@ -434,9 +397,7 @@ st.metric(
 )
 
 if tags_df is None or len(tags_df) == 0:
-    st.info(
-        "No transaction tags yet. Use **Update tags** in the sidebar (after the ledger exists)."
-    )
+    st.info("No transaction tags yet. Use **Update** in the sidebar (after bank data is uploaded).")
     st.stop()
 
 period_cols = ledger.select(["id", "year", "month", "day"]).unique()

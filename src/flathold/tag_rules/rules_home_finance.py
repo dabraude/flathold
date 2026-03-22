@@ -66,6 +66,7 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)ROSS\s*&\s*LIDDELL\s+LTD"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="factors",
@@ -80,6 +81,7 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         .str.strip_chars()
         .str.contains(r"(?i)NATWEST\s+BANK"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="mortgage",
@@ -111,6 +113,7 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         .str.contains(r"(?i)ACCOUNT\s+FEE")
         & (pl.col("Transaction Type") == "FEE"),
         amount_proportion=1,
+        counter_party=True,
     ),
     TagRule(
         tag="car",

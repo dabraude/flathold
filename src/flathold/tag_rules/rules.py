@@ -28,3 +28,19 @@ def tag_show_on_dashboard_default(tag: str) -> bool:
         if rule.tag == tag:
             return rule.show_on_dashboard_by_default
     return False
+
+
+def tag_counter_party(tag: str) -> bool:
+    """Return whether ``tag`` is a counterparty tag in ``TAG_RULES`` (person or institution)."""
+    for rule in TAG_RULES:
+        if rule.tag == tag:
+            return rule.counter_party
+    return False
+
+
+def tag_groups(tag: str) -> tuple[str, ...]:
+    """Return the group labels for ``tag`` from ``TAG_RULES`` (after ``TagRule`` normalization)."""
+    for rule in TAG_RULES:
+        if rule.tag == tag:
+            return rule.groups
+    return ()

@@ -1,4 +1,4 @@
-"""Pandera schemas for bank and ledger Delta tables."""
+"""Pandera schemas for bank and stored tags; ledger omits Balance (see LedgerSchema)."""
 
 import pandera.polars as pa
 
@@ -21,7 +21,7 @@ class BankSchema(pa.DataFrameModel):
 
 
 class LedgerSchema(pa.DataFrameModel):
-    """Schema for the ledger Delta table (bank columns + id + year/month/day + annotation)."""
+    """Schema for a ledger frame: bank columns except Balance, plus id and year/month/day."""
 
     transaction_counter: int = pa.Field(alias="Transaction Counter")
     transaction_date: str = pa.Field(alias="Transaction Date")
@@ -31,13 +31,10 @@ class LedgerSchema(pa.DataFrameModel):
     transaction_description: str = pa.Field(alias="Transaction Description")
     debit_amount: float = pa.Field(alias="Debit Amount")
     credit_amount: float = pa.Field(alias="Credit Amount")
-    balance: str = pa.Field(alias="Balance")
     id: str = pa.Field()
     year: int = pa.Field()
     month: int = pa.Field()
     day: int = pa.Field()
-    counter_party: str = pa.Field(alias="Counter Party")
-    item: str = pa.Field(alias="Item")
 
 
 class TransactionTagsSchema(pa.DataFrameModel):
@@ -46,3 +43,4 @@ class TransactionTagsSchema(pa.DataFrameModel):
     id: str = pa.Field()
     tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
     allocation: float = pa.Field()
+    counter_party: bool = pa.Field()

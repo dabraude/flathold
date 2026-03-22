@@ -274,6 +274,7 @@ source = { editable = "." }
 dependencies = [
     { name = "deltalake" },
     { name = "marimo" },
+    { name = "pandas" },
     { name = "pandera", extra = ["polars"] },
     { name = "polars", extra = ["rtcompat"] },
     { name = "polars-hash" },
@@ -292,6 +293,7 @@ dev = [
 requires-dist = [
     { name = "deltalake", specifier = ">=0.21.0" },
     { name = "marimo", specifier = ">=0.20.4" },
+    { name = "pandas", specifier = ">=2.0.0" },
     { name = "pandera", extras = ["polars"], specifier = ">=0.29.0" },
     { name = "polars", extras = ["rtcompat"], specifier = ">=1.38.1" },
     { name = "polars-hash", specifier = ">=0.5.6" },

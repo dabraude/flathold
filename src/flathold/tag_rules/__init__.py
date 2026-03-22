@@ -6,11 +6,17 @@ from flathold.tag_rules.core import (
     KEBAB_TAG_PATTERN,
     TagRule,
     validate_kebab_tag,
+    validate_tag_group_allocations,
 )
 from flathold.tag_rules.core import (
     apply_tag_rules as apply_tag_rules_impl,
 )
-from flathold.tag_rules.rules import TAG_RULES, tag_show_on_dashboard_default
+from flathold.tag_rules.rules import (
+    TAG_RULES,
+    tag_counter_party,
+    tag_groups,
+    tag_show_on_dashboard_default,
+)
 
 
 def apply_tag_rules(ledger: pl.DataFrame) -> pl.DataFrame:
@@ -23,6 +29,9 @@ __all__ = [
     "TAG_RULES",
     "TagRule",
     "apply_tag_rules",
+    "tag_counter_party",
+    "tag_groups",
     "tag_show_on_dashboard_default",
     "validate_kebab_tag",
+    "validate_tag_group_allocations",
 ]

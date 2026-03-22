@@ -8,3 +8,4 @@
     4. `uv run pre-commit run --all-files`
 3. ALWAYS return frozen dataclasses from functions
 4. ALWAYS have a schema for every table
+5. This is a self contained repo there is NEVER A need for backwards compatibility

@@ -7,30 +7,22 @@ from flathold.bank_delta import (
     read_existing_table,
     save_to_delta,
 )
-from flathold.ledger_delta import recreate_ledger_from_bank, update_ledger_from_bank
+from flathold.ledger_delta import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Upload statements", page_icon="📤", layout="wide")
 
 with st.sidebar:
-    st.caption("Ledger")
     if st.button(
-        "Update ledger",
-        help="Rebuild the ledger table from bank data (adds ids to each transaction)",
-        key="upload_update_ledger",
+        "Update",
+        help=(
+            "Sync stored tags with current bank data (prune orphans, remove legacy ledger files), "
+            "then reapply tag rules from tag_rules"
+        ),
+        key="upload_refresh_ledger_tags",
+        use_container_width=True,
     ):
-        with st.spinner("Updating ledger…"):
-            result = update_ledger_from_bank()
-        if result.success:
-            st.success(result.message)
-        else:
-            st.error(result.message)
-    if st.button(
-        "Recreate ledger",
-        help="Delete the ledger table and rebuild it from scratch from bank data",
-        key="upload_recreate_ledger",
-    ):
-        with st.spinner("Recreating ledger…"):
-            result = recreate_ledger_from_bank()
+        with st.spinner("Updating…"):
+            result = refresh_ledger_and_tags()
         if result.success:
             st.success(result.message)
         else:
