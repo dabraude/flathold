@@ -1,16 +1,19 @@
 """Concrete `TAG_RULES` list."""
 
 from flathold.tag_rules.core import TagRule, validate_kebab_tag
+from flathold.tag_rules.rules_counter_party import TAG_RULES_COUNTER_PARTY
 from flathold.tag_rules.rules_entertainment import TAG_RULES_ENTERTAINMENT
 from flathold.tag_rules.rules_food_groceries import TAG_RULES_FOOD_GROCERIES
 from flathold.tag_rules.rules_home_finance import TAG_RULES_HOME_FINANCE
 from flathold.tag_rules.rules_personal import TAG_RULES_PERSONAL
+from flathold.tag_rules.tag_group import TagGroup
 
 TAG_RULES: tuple[TagRule, ...] = (
     *TAG_RULES_PERSONAL,
     *TAG_RULES_HOME_FINANCE,
     *TAG_RULES_ENTERTAINMENT,
     *TAG_RULES_FOOD_GROCERIES,
+    *TAG_RULES_COUNTER_PARTY,
 )
 
 _rule_tags = [r.tag for r in TAG_RULES]
@@ -38,7 +41,7 @@ def tag_counter_party(tag: str) -> bool:
     return False
 
 
-def tag_groups(tag: str) -> tuple[str, ...]:
+def tag_groups(tag: str) -> tuple[TagGroup, ...]:
     """Return the group labels for ``tag`` from ``TAG_RULES`` (after ``TagRule`` normalization)."""
     for rule in TAG_RULES:
         if rule.tag == tag:

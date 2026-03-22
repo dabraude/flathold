@@ -18,6 +18,7 @@ from flathold.tag_rules.rules import (
     tag_groups,
     tag_show_on_dashboard_default,
 )
+from flathold.tag_rules.tag_group import TagGroup
 
 
 def apply_tag_rules(ledger: pl.DataFrame) -> pl.DataFrame:
@@ -28,6 +29,7 @@ def apply_tag_rules(ledger: pl.DataFrame) -> pl.DataFrame:
 __all__ = [
     "KEBAB_TAG_PATTERN",
     "TAG_RULES",
+    "TagGroup",
     "TagRule",
     "apply_tag_rules",
     "tag_counter_party",

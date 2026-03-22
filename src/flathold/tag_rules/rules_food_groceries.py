@@ -65,13 +65,6 @@ TAG_RULES_FOOD_GROCERIES: tuple[TagRule, ...] = (
         show_on_dashboard_by_default=True,
     ),
     TagRule(
-        tag="chocolaterium",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)SP\s+CHOCOLATE\s+SHOP"),
-        amount_proportion=1,
-    ),
-    TagRule(
         tag="farmers-market",
         predicate=(
             pl.col("Transaction Description")

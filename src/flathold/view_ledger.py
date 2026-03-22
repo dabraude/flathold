@@ -4,7 +4,12 @@ import polars as pl
 import streamlit as st
 
 from flathold.ledger_delta import read_ledger_table, refresh_ledger_and_tags
-from flathold.ledger_view import ledger_to_ledger_view, style_ledger_view_pandas
+from flathold.ledger_view import (
+    LEDGER_VIEW_COUNTER_PARTY_COLUMN,
+    ledger_non_counterparty_tag_count_expr,
+    ledger_to_ledger_view,
+    style_ledger_view_pandas,
+)
 
 st.set_page_config(page_title="View ledger", page_icon="📋", layout="wide")
 
@@ -55,8 +60,16 @@ if existing is None or len(existing) == 0:
 
 only_untagged = st.checkbox(
     "Only transactions without tags",
-    help="Hide rows that have at least one tag",
+    help=(
+        "Hide rows that have at least one tag outside Counter Party "
+        "(counterparty-only rows count as untagged)"
+    ),
     key="view_ledger_only_untagged",
+)
+only_without_counter_party = st.checkbox(
+    "Only transactions without counterparty tags",
+    help="Hide rows where at least one tag is a counterparty (person or institution)",
+    key="view_ledger_only_without_counter_party",
 )
 
 # Tabs: year → month (ledger has year, month columns)
@@ -72,9 +85,13 @@ for i, year in enumerate(years_sorted):
             with month_tabs[j]:
                 subset = existing.filter((pl.col("year") == year) & (pl.col("month") == month_num))
                 if only_untagged:
-                    subset = subset.filter(pl.col("tags").list.len() == 0)
+                    subset = subset.filter(ledger_non_counterparty_tag_count_expr() == 0)
                 subset = subset.sort(["Transaction Date", "Transaction Counter"])
                 view_df = ledger_to_ledger_view(subset)
+                if only_without_counter_party:
+                    view_df = view_df.filter(
+                        pl.col(LEDGER_VIEW_COUNTER_PARTY_COLUMN).list.len() == 0
+                    )
                 st.dataframe(
                     style_ledger_view_pandas(view_df.to_pandas()),
                     width="stretch",

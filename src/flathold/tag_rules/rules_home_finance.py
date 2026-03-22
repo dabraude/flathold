@@ -11,12 +11,6 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
-        tag="hp",
-        predicate=pl.col("Transaction Description").str.contains("(?i)HPI\\s+INSTANT\\s+INK\\s+UK"),
-        amount_proportion=1,
-        counter_party=True,
-    ),
-    TagRule(
         tag="gas-and-electricity",
         predicate=pl.col("Transaction Description").str.contains("(?i)octopus\\s+energy"),
         amount_proportion=1,
@@ -67,27 +61,11 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         amount_proportion=1,
     ),
     TagRule(
-        tag="ross-and-liddell",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)ROSS\s*&\s*LIDDELL\s+LTD"),
-        amount_proportion=1,
-        counter_party=True,
-    ),
-    TagRule(
         tag="factors",
         predicate=pl.col("Transaction Description")
         .str.strip_chars()
         .str.contains(r"(?i)ROSS\s*&\s*LIDDELL\s+LTD"),
         amount_proportion=1,
-    ),
-    TagRule(
-        tag="natwest",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)NATWEST\s+BANK"),
-        amount_proportion=1,
-        counter_party=True,
     ),
     TagRule(
         tag="mortgage",
@@ -111,15 +89,6 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
         ),
         amount_proportion=1,
         show_on_dashboard_by_default=True,
-    ),
-    TagRule(
-        tag="bos",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)ACCOUNT\s+FEE")
-        & (pl.col("Transaction Type") == "FEE"),
-        amount_proportion=1,
-        counter_party=True,
     ),
     TagRule(
         tag="car",

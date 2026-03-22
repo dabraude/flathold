@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 
 import polars as pl
 
+from flathold.tag_rules.tag_group import TagGroup
+
 # Lowercase letters, digits, and single hyphens between segments (kebab-case).
 KEBAB_TAG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 _TAG_RE = re.compile(KEBAB_TAG_PATTERN)
@@ -31,8 +33,9 @@ class TagRule:
 
     ``counter_party`` marks tags that identify a specific counterparty (person or institution).
 
-    ``groups`` classifies the tag (e.g. ``"counter_party"``, ``"utilities"``). If ``counter_party``
-    is true, ``"counter_party"`` is appended in ``__post_init__`` when missing.
+    ``groups`` classifies the tag (e.g. ``TagGroup.COUNTER_PARTY``, ``TagGroup.UTILITIES``). If
+    ``counter_party`` is true, ``TagGroup.COUNTER_PARTY`` is appended in ``__post_init__`` when
+    missing.
     """
 
     tag: str
@@ -41,12 +44,12 @@ class TagRule:
     amount_proportion: float = 0.0
     show_on_dashboard_by_default: bool = False
     counter_party: bool = False
-    groups: tuple[str, ...] = field(default_factory=tuple)
+    groups: tuple[TagGroup, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if not self.counter_party or "counter_party" in self.groups:
+        if not self.counter_party or TagGroup.COUNTER_PARTY in self.groups:
             return
-        object.__setattr__(self, "groups", (*self.groups, "counter_party"))
+        object.__setattr__(self, "groups", (*self.groups, TagGroup.COUNTER_PARTY))
 
 
 def _rule_allocation_expr(rule: TagRule) -> pl.Expr:
@@ -78,7 +81,7 @@ def validate_tag_group_allocations(
         tag = row["tag"]
         alloc_abs = abs(float(row["allocation"]))
         for g in tag_to_groups.get(tag, ()):
-            records.append((tid, g, alloc_abs))
+            records.append((tid, str(g), alloc_abs))
     if not records:
         return
     exploded = pl.DataFrame(
@@ -118,7 +121,7 @@ def validate_at_most_one_counter_party_tag_per_transaction(
     cp_rows: list[tuple[str, str]] = []
     for row in tags_df.iter_rows(named=True):
         tag = row["tag"]
-        if "counter_party" in tag_to_groups.get(tag, ()):
+        if TagGroup.COUNTER_PARTY in tag_to_groups.get(tag, ()):
             cp_rows.append((row["id"], tag))
     if not cp_rows:
         return
