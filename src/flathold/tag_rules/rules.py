@@ -14,9 +14,45 @@ TAG_RULES: tuple[TagRule, ...] = (
     ),
     TagRule(
         tag="pets",
+        predicate=(
+            pl.col("Transaction Description").str.strip_chars().str.contains(r"(?i)^SP YEARS\.COM$")
+            | pl.col("Transaction Description")
+            .str.strip_chars()
+            .str.contains(r"(?i)PET\s+PLAN\s+LTD")
+        ),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="insurance",
+        predicate=(
+            pl.col("Transaction Description")
+            .str.strip_chars()
+            .str.contains(r"(?i)PET\s+PLAN\s+LTD")
+            | pl.col("Transaction Description")
+            .str.strip_chars()
+            .str.contains(r"(?i)VITALITY\s+HEALTH")
+        ),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="health-insurance",
         predicate=pl.col("Transaction Description")
         .str.strip_chars()
-        .str.contains(r"(?i)^SP YEARS\.COM$"),
+        .str.contains(r"(?i)VITALITY\s+HEALTH"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="vitality",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)VITALITY\s+HEALTH"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="pet-plan",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)PET\s+PLAN\s+LTD"),
         amount_proportion=1,
     ),
     TagRule(
@@ -40,9 +76,23 @@ TAG_RULES: tuple[TagRule, ...] = (
         tag="utilities",
         predicate=pl.col("Transaction Description")
         .str.strip_chars()
-        .str.contains(r"(?i)(HYPEROPTIC\s+DD|octopus\s+energy)"),
+        .str.contains(r"(?i)(HYPEROPTIC\s+DD|octopus\s+energy|ROSS\s*&\s*LIDDELL\s+LTD)"),
         amount_proportion=1,
         show_on_dashboard_by_default=True,
+    ),
+    TagRule(
+        tag="ross-and-liddell",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)ROSS\s*&\s*LIDDELL\s+LTD"),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="factors",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)ROSS\s*&\s*LIDDELL\s+LTD"),
+        amount_proportion=1,
     ),
     TagRule(
         tag="natwest",
@@ -60,11 +110,27 @@ TAG_RULES: tuple[TagRule, ...] = (
     ),
     TagRule(
         tag="bank",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK|TOYOTA\s+FIN\s+SERV)"),
+        predicate=(
+            pl.col("Transaction Description")
+            .str.strip_chars()
+            .str.contains(r"(?i)(NATWEST\s+BANK|CREATION\.CO\.UK|TOYOTA\s+FIN\s+SERV)")
+            | (
+                pl.col("Transaction Description")
+                .str.strip_chars()
+                .str.contains(r"(?i)ACCOUNT\s+FEE")
+                & (pl.col("Transaction Type") == "FEE")
+            )
+        ),
         amount_proportion=1,
         show_on_dashboard_by_default=True,
+    ),
+    TagRule(
+        tag="bos",
+        predicate=pl.col("Transaction Description")
+        .str.strip_chars()
+        .str.contains(r"(?i)ACCOUNT\s+FEE")
+        & (pl.col("Transaction Type") == "FEE"),
+        amount_proportion=1,
     ),
     TagRule(
         tag="car",
