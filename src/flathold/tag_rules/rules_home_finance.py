@@ -2,7 +2,18 @@
 
 import polars as pl
 
+from flathold.agata_weekly_manual import AGATA_WEEKLY_DEBIT
 from flathold.tag_rules.core import TagRule
+
+# Aligned with ``AGATA_WEEKLY_MANUAL_DESCRIPTION`` in ``agata_weekly_manual``.
+# Also matches legacy description text that used "Aga" before the name was corrected.
+_AGATA_WEEKLY_MANUAL_PREDICATE = (
+    (pl.col("Transaction Type") == "MANUAL")
+    & (pl.col("Debit Amount") == AGATA_WEEKLY_DEBIT)
+    & pl.col("Transaction Description")
+    .str.strip_chars()
+    .str.contains(r"(?i)Payment to Aga(ta)?.*weekly cleaning.*\(manual\)")
+)
 
 TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
     TagRule(
@@ -30,7 +41,6 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
             r"(?i)(HYPEROPTIC\s+DD|octopus\s+energy|ROSS\s*&\s*LIDDELL\s+LTD|EDINBURGH\s+COUNCIL|RING\s+BASIC\s+PLAN)"
         ),
         amount_proportion=1,
-        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="ring",
@@ -88,7 +98,6 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
             )
         ),
         amount_proportion=1,
-        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="car",
@@ -102,9 +111,15 @@ TAG_RULES_HOME_FINANCE: tuple[TagRule, ...] = (
     ),
     TagRule(
         tag="cleaning",
-        predicate=pl.col("Transaction Description")
-        .str.strip_chars()
-        .str.contains(r"(?i)FRESH\s+CAR"),
+        predicate=(
+            pl.col("Transaction Description").str.strip_chars().str.contains(r"(?i)FRESH\s+CAR")
+            | _AGATA_WEEKLY_MANUAL_PREDICATE
+        ),
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="cash-spend",
+        predicate=_AGATA_WEEKLY_MANUAL_PREDICATE,
         amount_proportion=1,
     ),
     TagRule(

@@ -1,24 +1,16 @@
 """Tag rule types, validation, and applying rules to a ledger."""
 
-import re
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import polars as pl
 
-from flathold.tag_rules.tag_group import TagGroup
+from flathold.tag_group import TagGroup
+from flathold.tag_pattern import validate_kebab_tag
+from flathold.tag_rule_metadata import TagRuleMetadata
 
-# Lowercase letters, digits, and single hyphens between segments (kebab-case).
-KEBAB_TAG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
-_TAG_RE = re.compile(KEBAB_TAG_PATTERN)
 # Float tolerance when comparing summed allocations to |Debit + Credit|.
 _GROUP_ALLOC_EPS = 1e-6
-
-
-def validate_kebab_tag(tag: str) -> None:
-    """Raise ValueError if `tag` is not kebab-case alphanumeric."""
-    if not _TAG_RE.fullmatch(tag):
-        msg = f"Invalid tag {tag!r}: expected kebab-case alphanumeric (pattern {KEBAB_TAG_PATTERN})"
-        raise ValueError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,28 +20,14 @@ class TagRule:
     Allocation is ``amount_absolute + amount_proportion * line_amount`` where ``line_amount`` is
     ``Debit Amount + Credit Amount`` on the matched ledger row.
 
-    ``show_on_dashboard_by_default`` controls the dashboard tag multiselect initial selection for
-    this tag (tags not listed in rules default to False).
-
-    ``counter_party`` marks tags that identify a specific counterparty (person or institution).
-
-    ``groups`` classifies the tag (e.g. ``TagGroup.COUNTER_PARTY``, ``TagGroup.UTILITIES``). If
-    ``counter_party`` is true, ``TagGroup.COUNTER_PARTY`` is appended in ``__post_init__`` when
-    missing.
+    Display and grouping (dashboard defaults, counterparty, allocation groups) live in the
+    ``tag_definitions`` Delta table, not on ``TagRule``.
     """
 
     tag: str
     predicate: pl.Expr
     amount_absolute: float = 0.0
     amount_proportion: float = 0.0
-    show_on_dashboard_by_default: bool = False
-    counter_party: bool = False
-    groups: tuple[TagGroup, ...] = field(default_factory=tuple)
-
-    def __post_init__(self) -> None:
-        if not self.counter_party or TagGroup.COUNTER_PARTY in self.groups:
-            return
-        object.__setattr__(self, "groups", (*self.groups, TagGroup.COUNTER_PARTY))
 
 
 def _rule_allocation_expr(rule: TagRule) -> pl.Expr:
@@ -60,17 +38,17 @@ def _rule_allocation_expr(rule: TagRule) -> pl.Expr:
 def validate_tag_group_allocations(
     ledger: pl.DataFrame,
     tags_df: pl.DataFrame,
-    rules: tuple[TagRule, ...],
+    tag_meta: Mapping[str, TagRuleMetadata],
 ) -> None:
     """Raise ValueError if any transaction has group allocation sums over 100% of |line amount|.
 
-    Each ``TagRule.groups`` entry is a separate bucket: for each ``(id, group)`` we require
+    Each tag's ``groups`` entry is a separate bucket: for each ``(id, group)`` we require
     ``sum(|allocation|) <= |Debit + Credit|`` for that transaction, where each tag row counts
     its ``|allocation|`` once toward every group it belongs to.
     """
     if len(tags_df) == 0:
         return
-    tag_to_groups = {r.tag: r.groups for r in rules}
+    tag_to_groups = {t: m.groups for t, m in tag_meta.items()}
     amounts = ledger.select(
         pl.col("id"),
         (pl.col("Debit Amount") + pl.col("Credit Amount")).abs().alias("abs_line"),
@@ -112,12 +90,12 @@ def validate_tag_group_allocations(
 
 def validate_at_most_one_counter_party_tag_per_transaction(
     tags_df: pl.DataFrame,
-    rules: tuple[TagRule, ...],
+    tag_meta: Mapping[str, TagRuleMetadata],
 ) -> None:
-    """Raise ValueError if any transaction has more than one tag in the ``counter_party`` group."""
+    """Raise ValueError if any transaction has more than one tag in the ``counter-party`` group."""
     if len(tags_df) == 0:
         return
-    tag_to_groups = {r.tag: r.groups for r in rules}
+    tag_to_groups = {t: m.groups for t, m in tag_meta.items()}
     cp_rows: list[tuple[str, str]] = []
     for row in tags_df.iter_rows(named=True):
         tag = row["tag"]
@@ -139,13 +117,41 @@ def validate_at_most_one_counter_party_tag_per_transaction(
             f"id={r['id']!r} tags={r['counter_party_tags']!r}" for r in sample.iter_rows(named=True)
         ]
         msg = (
-            "Each transaction may have at most one tag in the counter_party group; "
+            "Each transaction may have at most one tag in the counter-party group; "
             f"{len(bad)} transaction(s) have more. Examples:\n" + "\n".join(lines)
         )
         raise ValueError(msg)
 
 
-def apply_tag_rules(ledger: pl.DataFrame, rules: tuple[TagRule, ...]) -> pl.DataFrame:
+def validate_transaction_tags_no_calculated_tags(
+    tags_df: pl.DataFrame,
+    tag_meta: Mapping[str, TagRuleMetadata],
+) -> None:
+    """Raise ``ValueError`` if any row uses a tag marked calculated in definitions."""
+    if len(tags_df) == 0:
+        return
+    bad: list[tuple[str, str]] = []
+    for row in tags_df.iter_rows(named=True):
+        tag = str(row["tag"])
+        m = tag_meta.get(tag)
+        if m is not None and m.calculated:
+            bad.append((str(row["id"]), tag))
+    if not bad:
+        return
+    sample = bad[:10]
+    lines = [f"id={tid!r} tag={t!r}" for tid, t in sample]
+    msg = (
+        "Transaction tags must not use calculated tags: "
+        f"{len(bad)} row(s). Examples:\n" + "\n".join(lines)
+    )
+    raise ValueError(msg)
+
+
+def apply_tag_rules(
+    ledger: pl.DataFrame,
+    rules: tuple[TagRule, ...],
+    tag_meta: Mapping[str, TagRuleMetadata],
+) -> pl.DataFrame:
     """Return one row per (id, tag) with allocation from each rule's absolute and proportion."""
     empty = pl.DataFrame(
         {
@@ -159,11 +165,15 @@ def apply_tag_rules(ledger: pl.DataFrame, rules: tuple[TagRule, ...]) -> pl.Data
         return empty
     parts: list[pl.DataFrame] = []
     for rule in rules:
+        meta = tag_meta.get(rule.tag)
+        if meta is None:
+            msg = f"Missing tag_definitions metadata for rule tag {rule.tag!r}"
+            raise ValueError(msg)
         matched = ledger.filter(rule.predicate).select(
             pl.col("id"),
             pl.lit(rule.tag).alias("tag"),
             _rule_allocation_expr(rule).alias("allocation"),
-            pl.lit(rule.counter_party).alias("counter_party"),
+            pl.lit(meta.counter_party).alias("counter_party"),
         )
         parts.append(matched)
     if not parts:
@@ -172,6 +182,7 @@ def apply_tag_rules(ledger: pl.DataFrame, rules: tuple[TagRule, ...]) -> pl.Data
     out = out.unique(subset=["id", "tag"])
     for t in out["tag"].to_list():
         validate_kebab_tag(t)
-    validate_tag_group_allocations(ledger, out, rules)
-    validate_at_most_one_counter_party_tag_per_transaction(out, rules)
+    validate_tag_group_allocations(ledger, out, tag_meta)
+    validate_at_most_one_counter_party_tag_per_transaction(out, tag_meta)
+    validate_transaction_tags_no_calculated_tags(out, tag_meta)
     return out

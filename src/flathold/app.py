@@ -17,12 +17,22 @@ upload_page = st.Page(
     title="Upload statements",
     icon="📤",
 )
+manual_page = st.Page(
+    _ROOT / "view_manual_entries.py",
+    title="Manual entries",
+    icon="✏️",
+)
 ledger_page = st.Page(
     _ROOT / "view_ledger.py",
     title="View ledger",
     icon="📋",
 )
+tags_page = st.Page(
+    _ROOT / "view_tags.py",
+    title="Tags",
+    icon="🏷️",
+)
 
-pg = st.navigation([dashboard_page, upload_page, ledger_page])
+pg = st.navigation([dashboard_page, upload_page, manual_page, ledger_page, tags_page])
 st.set_page_config(page_title="Flathold", page_icon="🏦", layout="wide")
 pg.run()

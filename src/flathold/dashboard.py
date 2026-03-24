@@ -13,7 +13,24 @@ from flathold.ledger_delta import (
     read_transaction_tags_table,
     refresh_ledger_and_tags,
 )
+from flathold.tag_definitions_store import read_tag_rule_metadata_map
+from flathold.tag_group import TagGroup
 from flathold.tag_rules import tag_show_on_dashboard_default
+from flathold.uncategorised_sector import (
+    UNCATEGORISED_SECTOR_TAG,
+    average_monthly_uncategorised_sector,
+    uncategorised_sector_daily_allocations,
+)
+from flathold.unknown_cash import (
+    UNKNOWN_CASH_TAG,
+    average_monthly_unknown_cash,
+    unknown_cash_daily_allocations,
+)
+from flathold.untagged_spend import (
+    UNTAGGED_SPEND_TAG,
+    average_monthly_untagged_spend,
+    untagged_spend_daily_allocations,
+)
 
 st.set_page_config(page_title="Dashboard", page_icon="🏦", layout="wide")
 
@@ -97,8 +114,12 @@ def _avg_monthly_tagged_unique_debit(inp: _TaggedUniqueMonthlyAvgInput) -> float
     return float(tagged.sum()) / float(n) if n else 0.0
 
 
-def _request_dashboard_tag_defaults() -> None:
-    st.session_state["_apply_dashboard_tag_defaults"] = True
+def _request_dashboard_group(group_value: str) -> None:
+    st.session_state["_dashboard_apply_group"] = group_value
+
+
+def _tag_group_button_label(group: TagGroup) -> str:
+    return group.value.replace("-", " ").title()
 
 
 # Defaults match Streamlit's `theme.chartCategoricalColors` docs (config.py).
@@ -261,7 +282,7 @@ with st.sidebar:
             "then reapply tag rules from tag_rules"
         ),
         key="main_refresh_ledger_tags",
-        use_container_width=True,
+        width="stretch",
     ):
         with st.spinner("Updating…"):
             result = refresh_ledger_and_tags()
@@ -279,7 +300,10 @@ ledger = read_ledger_table()
 tags_df = read_transaction_tags_table()
 
 if ledger is None or len(ledger) == 0:
-    st.info("No bank data yet. Upload a CSV on **Upload statements** to see the dashboard.")
+    st.info(
+        "No ledger data yet. Upload a CSV on **Upload statements** and/or add rows on "
+        "**Manual entries**."
+    )
     st.stop()
 
 ledger_periods = ledger.with_columns(
@@ -332,25 +356,25 @@ last_30_lo, last_30_hi = _clamp_range(
 
 shortcut_cols = st.columns(7)
 with shortcut_cols[0]:
-    if st.button("This month", key="shortcut_this_month", use_container_width=True):
+    if st.button("This month", key="shortcut_this_month", width="stretch"):
         st.session_state.dashboard_date_range = (this_month_lo, this_month_hi)
 with shortcut_cols[1]:
-    if st.button("Last 30 days", key="shortcut_last_30d", use_container_width=True):
+    if st.button("Last 30 days", key="shortcut_last_30d", width="stretch"):
         st.session_state.dashboard_date_range = (last_30_lo, last_30_hi)
 with shortcut_cols[2]:
-    if st.button("Last 3 months", key="shortcut_last_3m", use_container_width=True):
+    if st.button("Last 3 months", key="shortcut_last_3m", width="stretch"):
         st.session_state.dashboard_date_range = (last_3_lo, last_3_hi)
 with shortcut_cols[3]:
-    if st.button("Last 6 months", key="shortcut_last_6m", use_container_width=True):
+    if st.button("Last 6 months", key="shortcut_last_6m", width="stretch"):
         st.session_state.dashboard_date_range = (last_6_lo, last_6_hi)
 with shortcut_cols[4]:
-    if st.button("Last year", key="shortcut_last_year", use_container_width=True):
+    if st.button("Last year", key="shortcut_last_year", width="stretch"):
         st.session_state.dashboard_date_range = (last_year_lo, last_year_hi)
 with shortcut_cols[5]:
-    if st.button("Year to date", key="shortcut_ytd", use_container_width=True):
+    if st.button("Year to date", key="shortcut_ytd", width="stretch"):
         st.session_state.dashboard_date_range = (ytd_lo, ytd_hi)
 with shortcut_cols[6]:
-    if st.button("All time", key="shortcut_all_time", use_container_width=True):
+    if st.button("All time", key="shortcut_all_time", width="stretch"):
         st.session_state.dashboard_date_range = (period_min, period_max)
 
 date_range_raw = st.date_input(
@@ -400,12 +424,24 @@ if tags_df is None or len(tags_df) == 0:
     st.info("No transaction tags yet. Use **Update** in the sidebar (after bank data is uploaded).")
     st.stop()
 
+tag_meta = read_tag_rule_metadata_map()
 period_cols = ledger.select(["id", "year", "month", "day"]).unique()
 joined = tags_df.join(period_cols, on="id", how="inner").with_columns(
     pl.date(pl.col("year"), pl.col("month"), pl.col("day")).alias("period"),
 )
-agg = joined.group_by(["period", "tag"]).agg(pl.col("allocation").sum().alias("allocation"))
-all_tags = sorted(agg["tag"].unique().to_list())
+agg_from_rules = joined.group_by(["period", "tag"]).agg(
+    pl.col("allocation").sum().alias("allocation")
+)
+unknown_daily = unknown_cash_daily_allocations(tags_df, period_cols, range_start, range_end)
+untagged_daily = untagged_spend_daily_allocations(ledger, tags_df, range_start, range_end)
+uncategorised_daily = uncategorised_sector_daily_allocations(
+    ledger, tags_df, range_start, range_end, tag_meta
+)
+agg = pl.concat(
+    [agg_from_rules, unknown_daily, untagged_daily, uncategorised_daily], how="vertical"
+)
+calculated_tag_names = {t for t, m in tag_meta.items() if m.calculated}
+all_tags = sorted(set(agg["tag"].unique().to_list()) | calculated_tag_names)
 
 if not all_tags:
     st.info("No tags to chart after joining with the ledger.")
@@ -422,10 +458,17 @@ if not default_tags:
 if "dashboard_tags" not in st.session_state:
     st.session_state.dashboard_tags = list(default_tags)
 
-# Apply "Defaults" before the multiselect is created — cannot assign `dashboard_tags` after
-# the widget with that key is instantiated (StreamlitAPIException).
-if st.session_state.pop("_apply_dashboard_tag_defaults", False):
-    st.session_state.dashboard_tags = list(default_tags)
+# Apply group filter before the multiselect — cannot assign `dashboard_tags` after the widget
+# with that key is instantiated (StreamlitAPIException).
+pending_group = st.session_state.pop("_dashboard_apply_group", None)
+if pending_group is not None:
+    try:
+        g = TagGroup(pending_group)
+    except ValueError:
+        g = None
+    if g is not None:
+        picked = [t for t in all_tags_in_range if g in tag_meta[t].groups]
+        st.session_state.dashboard_tags = list(picked)
 
 # Keep the user's tag selection when the date range changes; drop unknown tags only.
 _tags_valid = [t for t in st.session_state.dashboard_tags if t in all_tags]
@@ -436,20 +479,26 @@ selected = st.multiselect(
     options=all_tags,
     key="dashboard_tags",
     help=(
-        "Daily allocation per tag; missing days are zero. Every tag in the ledger is listed. "
-        "Initial selection and Defaults use `show_on_dashboard_by_default` among tags with "
-        "allocation in the date range, or all such tags if none match. "
-        "Selection is kept when you change the date range. "
-        "If none remain, the chart stays empty until you pick tags or use Defaults."
+        "Daily allocation per tag; missing days are zero. Includes rule tags and calculated "
+        "tags (e.g. unknown-cash, untagged-spend, uncategorised-sector). "
+        "Initial selection uses `show_on_dashboard_by_default` among tags with allocation in "
+        "the date range, or all such tags if none match. Use a group button below to show only "
+        "tags in that group (with allocation in range). Selection is kept when you change the "
+        "date range. If none remain, the chart stays empty until you pick tags or a group."
     ),
 )
 
-st.button(
-    "Defaults",
-    key="dashboard_tags_reset_defaults",
-    help="Reset tag selection to rule defaults for this date range.",
-    on_click=_request_dashboard_tag_defaults,
-)
+group_btn_cols = st.columns(len(TagGroup), gap="small")
+for col, grp in zip(group_btn_cols, TagGroup, strict=True):
+    with col:
+        st.button(
+            _tag_group_button_label(grp),
+            key=f"dashboard_tags_group_{grp.value}",
+            help=f"Show only tags in the `{grp.value}` group (with allocation in this range).",
+            on_click=_request_dashboard_group,
+            args=(grp.value,),
+            width="stretch",
+        )
 
 if not selected:
     st.warning("Select at least one tag to see the chart.")
@@ -505,11 +554,12 @@ bar_df = pl.DataFrame(
     }
 )
 
+rule_selected = tuple(t for t in selected if tag_meta.get(t) is None or not tag_meta[t].calculated)
 avg_tagged = _avg_monthly_tagged_unique_debit(
     _TaggedUniqueMonthlyAvgInput(
         ledger=ledger,
         tags_df=tags_df,
-        selected_tags=tuple(selected),
+        selected_tags=rule_selected,
         period_cols=period_cols,
         lo=lo,
         hi=hi,
@@ -517,15 +567,82 @@ avg_tagged = _avg_monthly_tagged_unique_debit(
     ),
 )
 n_months_metric = monthly_in_range.height
-st.metric(
-    "Average tagged monthly expenditure",
-    f"£{avg_tagged:,.2f}",
-    help=(
-        "Mean per calendar month of debit from transactions that carry at least one selected "
-        "tag; each transaction is counted once per month (same months as total average above). "
-        f"{n_months_metric} month(s) in range."
-    ),
-)
+metric_cols = st.columns(4)
+with metric_cols[0]:
+    if rule_selected:
+        st.metric(
+            "Average tagged monthly expenditure",
+            f"£{avg_tagged:,.2f}",
+            help=(
+                "Mean per calendar month of debit from transactions that carry at least one "
+                "selected rule tag; each transaction is counted once per month (same months as "
+                f"total average above). {n_months_metric} month(s) in range. "
+                "Calculated tags are excluded."
+            ),
+        )
+    else:
+        st.metric(
+            "Average tagged monthly expenditure",
+            "—",
+            help="No rule tags selected; pick tags other than calculated-only to compute this.",
+        )
+with metric_cols[1]:
+    if UNKNOWN_CASH_TAG in selected:
+        avg_unknown = average_monthly_unknown_cash(tags_df, period_cols, lo, hi)
+        st.metric(
+            "Average monthly unknown cash",
+            f"£{avg_unknown:,.2f}",
+            help=(
+                "Mean per calendar month of (cash-spend allocations minus cash-withdrawal "
+                f"allocations). {n_months_metric} month(s) in range."
+            ),
+        )
+    else:
+        st.metric(
+            "Average monthly unknown cash",
+            "—",
+            help="Select **unknown-cash** to see spend minus withdrawal by month (spread per day).",
+        )
+with metric_cols[2]:
+    if UNTAGGED_SPEND_TAG in selected:
+        avg_untagged = average_monthly_untagged_spend(ledger, tags_df, lo, hi)
+        st.metric(
+            "Average monthly untagged spend",
+            f"£{avg_untagged:,.2f}",
+            help=(
+                "Mean per calendar month of |line| minus sum of |tag allocations| per "
+                f"transaction (then summed). {n_months_metric} month(s) in range."
+            ),
+        )
+    else:
+        st.metric(
+            "Average monthly untagged spend",
+            "—",
+            help=(
+                "Select **untagged-spend** for debit not covered by tag allocations "
+                "(spread per day)."
+            ),
+        )
+with metric_cols[3]:
+    if UNCATEGORISED_SECTOR_TAG in selected:
+        avg_uncat = average_monthly_uncategorised_sector(ledger, tags_df, tag_meta, lo, hi)
+        st.metric(
+            "Average monthly uncategorised sector",
+            f"£{avg_uncat:,.2f}",
+            help=(
+                "Mean per calendar month of |line| minus sum of |allocations| on tags in the "
+                f"sector-codes group only (then summed). {n_months_metric} month(s) in range."
+            ),
+        )
+    else:
+        st.metric(
+            "Average monthly uncategorised sector",
+            "—",
+            help=(
+                "Select **uncategorised-sector** for debit not covered by sector-code tag "
+                "allocations (spread per day)."
+            ),
+        )
 
 bar_col, line_col = st.columns([3, 5], vertical_alignment="center")
 with bar_col:
@@ -535,7 +652,7 @@ with bar_col:
             ratio_denominator=ratio_denominator,
             selected_tags=tuple(selected),
         ),
-        use_container_width=True,
+        width="stretch",
     )
 with line_col:
     line_mode = st.radio(
@@ -563,7 +680,7 @@ with line_col:
             selected_tags=tuple(selected),
             value_tooltip_title=line_tooltip_title,
         ),
-        use_container_width=True,
+        width="stretch",
     )
 
 bank = read_existing_table()

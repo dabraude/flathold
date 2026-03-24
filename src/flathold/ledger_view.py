@@ -1,32 +1,28 @@
 """Ledger rows prepared for the View ledger page (split tags + display styling)."""
 
-from collections.abc import Sequence
-
 import pandas as pd
 import polars as pl
 from pandas.io.formats.style import Styler
 
+from flathold.tag_definitions_store import read_tag_rule_metadata_map
 from flathold.tag_rules import TagGroup, tag_groups
 
 LEDGER_VIEW_COUNTER_PARTY_COLUMN = "Counter Party"
 LEDGER_VIEW_TAGS_COLUMN = "Tags"
+LEDGER_SOURCE_COLUMN = "ledger_source"
 
 
-def _non_counterparty_tag_count_for_cell(cell: object) -> int:
-    """How many tags on this row are not in the ``counter_party`` group (same split as the view)."""
-    if cell is None or isinstance(cell, (str, bytes)):
-        return 0
-    if not isinstance(cell, Sequence):
-        return 0
-    return sum(1 for t in cell if TagGroup.COUNTER_PARTY not in tag_groups(str(t)))
+def _counterparty_column_tag_names() -> frozenset[str]:
+    """Names that map to the Counter Party column (``ledger_to_ledger_view`` split)."""
+    meta = read_tag_rule_metadata_map()
+    return frozenset({name for name, m in meta.items() if TagGroup.COUNTER_PARTY in m.groups})
 
 
 def ledger_non_counterparty_tag_count_expr(tags_column: str = "tags") -> pl.Expr:
     """Polars expression: count of tags per row that belong in ``Tags``, not ``Counter Party``."""
-    return pl.col(tags_column).map_elements(
-        _non_counterparty_tag_count_for_cell,
-        return_dtype=pl.UInt32,
-    )
+    cp = _counterparty_column_tag_names()
+    inner = pl.element().is_in(list(cp)).not_().cast(pl.UInt32)
+    return pl.col(tags_column).list.eval(inner).list.sum()
 
 
 def ledger_to_ledger_view(ledger: pl.DataFrame) -> pl.DataFrame:
@@ -60,15 +56,19 @@ def ledger_to_ledger_view(ledger: pl.DataFrame) -> pl.DataFrame:
 
 
 def reorder_ledger_view_columns(df: pl.DataFrame) -> pl.DataFrame:
-    """Place ``id`` first, then counter party column, then other tags, then remaining columns."""
+    """Place ``id`` first, optional ``ledger_source``, then counter party / tags, then the rest."""
     cols = df.columns
     if "id" not in cols:
         return df
     cp = LEDGER_VIEW_COUNTER_PARTY_COLUMN
     tags_col = LEDGER_VIEW_TAGS_COLUMN
-    rest = [c for c in cols if c not in ("id", tags_col, cp)]
+    src = LEDGER_SOURCE_COLUMN
+    head: list[str] = ["id"]
+    if src in cols:
+        head.append(src)
     mid = [c for c in (cp, tags_col) if c in cols]
-    return df.select(["id", *mid, *rest])
+    rest = [c for c in cols if c not in (*head, *mid)]
+    return df.select([*head, *mid, *rest])
 
 
 def style_ledger_view_pandas(pdf: pd.DataFrame) -> Styler:

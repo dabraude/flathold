@@ -2,7 +2,7 @@
 
 import pandera.polars as pa
 
-from flathold.tag_rules import KEBAB_TAG_PATTERN
+from flathold.tag_pattern import KEBAB_TAG_PATTERN
 
 
 class BankSchema(pa.DataFrameModel):
@@ -37,6 +37,23 @@ class LedgerSchema(pa.DataFrameModel):
     day: int = pa.Field()
 
 
+# Column order for ``LedgerSchema`` Polars frames (bank-derived + manual); use before ``pl.concat``.
+LEDGER_COLUMN_NAMES: tuple[str, ...] = (
+    "Transaction Counter",
+    "Transaction Date",
+    "Transaction Type",
+    "Sort Code",
+    "Account Number",
+    "Transaction Description",
+    "Debit Amount",
+    "Credit Amount",
+    "id",
+    "year",
+    "month",
+    "day",
+)
+
+
 class TransactionTagsSchema(pa.DataFrameModel):
     """One row per tag on a ledger transaction; (id, tag) is unique (no duplicate tags per txn)."""
 
@@ -44,3 +61,15 @@ class TransactionTagsSchema(pa.DataFrameModel):
     tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
     allocation: float = pa.Field()
     counter_party: bool = pa.Field()
+
+
+class TagDefinitionsSchema(pa.DataFrameModel):
+    """One row per tag: display and grouping metadata (rules reference tags by name)."""
+
+    tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
+    show_on_dashboard_by_default: bool = pa.Field()
+    counter_party: bool = pa.Field()
+    # True when the tag is derived by logic (e.g. rollups); rule-applied tags are False.
+    calculated: bool = pa.Field()
+    # Pipe-separated ``TagGroup`` values, e.g. ``counter-party`` or ``sector-codes``.
+    groups: str = pa.Field()

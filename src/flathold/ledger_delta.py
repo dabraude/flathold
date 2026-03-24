@@ -1,4 +1,4 @@
-"""Ledger rows (stable ids + calendar parts) computed from the bank table; tags stored in Delta."""
+"""Ledger rows from the bank table; tags and per-tag metadata live in Delta tables."""
 
 import hashlib
 import shutil
@@ -9,8 +9,11 @@ from deltalake import write_deltalake
 
 from flathold.bank_delta import read_existing_table
 from flathold.constants import LEDGER_TABLE, TRANSACTION_TAGS_TABLE
-from flathold.schemas import TransactionTagsSchema
+from flathold.manual_ledger import read_manual_ledger_table
+from flathold.schemas import LEDGER_COLUMN_NAMES, TransactionTagsSchema
+from flathold.tag_definitions_store import ensure_tag_definitions_table, read_tag_rule_metadata_map
 from flathold.tag_rules import apply_tag_rules
+from flathold.tag_rules.core import validate_transaction_tags_no_calculated_tags
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +78,75 @@ def _compute_ledger_from_bank() -> pl.DataFrame | None:
     bank = read_existing_table()
     if bank is None or len(bank) == 0:
         return None
-    return _build_ledger_from_bank_df(bank)
+    return _align_ledger_columns(_build_ledger_from_bank_df(bank))
+
+
+def _align_ledger_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Enforce ``LEDGER_COLUMN_NAMES`` order and dtypes so bank + manual ``vstack`` matches."""
+    aligned = df.select(LEDGER_COLUMN_NAMES)
+    return aligned.with_columns(
+        pl.col("Transaction Counter").cast(pl.Int64, strict=False),
+        pl.col("Transaction Date").cast(pl.Utf8, strict=False),
+        pl.col("Transaction Type").cast(pl.Utf8, strict=False),
+        pl.col("Sort Code").cast(pl.Utf8, strict=False),
+        pl.col("Account Number").cast(pl.Utf8, strict=False),
+        pl.col("Transaction Description").cast(pl.Utf8, strict=False),
+        pl.col("Debit Amount").cast(pl.Float64, strict=False),
+        pl.col("Credit Amount").cast(pl.Float64, strict=False),
+        pl.col("id").cast(pl.Utf8, strict=False),
+        pl.col("year").cast(pl.Int64, strict=False),
+        pl.col("month").cast(pl.Int64, strict=False),
+        pl.col("day").cast(pl.Int64, strict=False),
+    )
+
+
+def _combine_bank_and_manual_ledger(
+    bank_ledger: pl.DataFrame | None,
+    manual_ledger: pl.DataFrame | None,
+) -> pl.DataFrame | None:
+    """Union bank-derived and manual rows (no ``ledger_source`` column)."""
+    parts: list[pl.DataFrame] = []
+    if bank_ledger is not None and len(bank_ledger) > 0:
+        parts.append(_align_ledger_columns(bank_ledger))
+    if manual_ledger is not None and len(manual_ledger) > 0:
+        parts.append(_align_ledger_columns(manual_ledger))
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return pl.concat(parts, how="vertical")
+
+
+def _ledger_with_source(
+    bank_ledger: pl.DataFrame | None,
+    manual_ledger: pl.DataFrame | None,
+) -> pl.DataFrame | None:
+    """Like ``_combine_bank_and_manual_ledger`` but adds ``ledger_source`` ``bank`` / ``manual``."""
+    parts: list[pl.DataFrame] = []
+    if bank_ledger is not None and len(bank_ledger) > 0:
+        parts.append(
+            _align_ledger_columns(bank_ledger).with_columns(pl.lit("bank").alias("ledger_source"))
+        )
+    if manual_ledger is not None and len(manual_ledger) > 0:
+        parts.append(
+            _align_ledger_columns(manual_ledger).with_columns(
+                pl.lit("manual").alias("ledger_source")
+            )
+        )
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return pl.concat(parts, how="vertical")
 
 
 def read_ledger_table() -> pl.DataFrame | None:
-    """Return the ledger with `tags` from transaction_tags (left join, default [])."""
-    ledger = _compute_ledger_from_bank()
+    """Return bank + manual ledger with ``ledger_source``, plus ``tags`` from transaction_tags."""
+    ensure_tag_definitions_table()
+    bank_ledger = _compute_ledger_from_bank()
+    manual = read_manual_ledger_table()
+    manual_df = manual if manual is not None and len(manual) > 0 else None
+    ledger = _ledger_with_source(bank_ledger, manual_df)
     if ledger is None:
         return None
     return _ledger_with_tags_left_join(ledger)
@@ -134,6 +200,7 @@ def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
         return
     _assert_unique_id_tag_pairs(tags_df)
     TransactionTagsSchema.validate(tags_df)
+    validate_transaction_tags_no_calculated_tags(tags_df, read_tag_rule_metadata_map())
     TRANSACTION_TAGS_TABLE.parent.mkdir(parents=True, exist_ok=True)
     write_deltalake(
         str(TRANSACTION_TAGS_TABLE),
@@ -145,11 +212,14 @@ def _write_transaction_tags_table(tags_df: pl.DataFrame) -> None:
 
 def update_transaction_tags() -> UpdateTagsResult:
     """Replace transaction tags with tags derived from `tag_rules.rules.TAG_RULES`."""
-    ledger = _compute_ledger_from_bank()
+    bank_ledger = _compute_ledger_from_bank()
+    manual = read_manual_ledger_table()
+    manual_df = manual if manual is not None and len(manual) > 0 else None
+    ledger = _combine_bank_and_manual_ledger(bank_ledger, manual_df)
     if ledger is None or len(ledger) == 0:
         return UpdateTagsResult(
             success=False,
-            message="No bank data. Upload statements first.",
+            message="No ledger data. Upload bank CSV and/or add manual entries.",
         )
     try:
         tags_df = apply_tag_rules(ledger)
@@ -185,45 +255,47 @@ def _prune_transaction_tags_to_ledger_ids(ledger_ids: pl.Series) -> None:
 
 def update_ledger_from_bank() -> UpdateLedgerResult:
     """
-    Prune stored tags to ids present in the ledger computed from the current bank table,
+    Prune stored tags to ids present in the current bank + manual ledger,
     and remove any legacy persisted ledger Delta directory.
     """
     bank = read_existing_table()
-    if bank is None or len(bank) == 0:
+    manual = read_manual_ledger_table()
+    bank_ledger = _build_ledger_from_bank_df(bank) if bank is not None and len(bank) > 0 else None
+    manual_df = manual if manual is not None and len(manual) > 0 else None
+    ledger = _combine_bank_and_manual_ledger(bank_ledger, manual_df)
+    if ledger is None or len(ledger) == 0:
         return UpdateLedgerResult(
             success=False,
-            message="No bank data. Upload statements first.",
+            message="No bank or manual ledger data.",
         )
-    ledger = _build_ledger_from_bank_df(bank)
+    n_bank = len(bank_ledger) if bank_ledger is not None else 0
+    n_manual = len(manual_df) if manual_df is not None else 0
     _remove_legacy_ledger_table()
     _prune_transaction_tags_to_ledger_ids(ledger["id"])
-    return UpdateLedgerResult(
-        success=True,
-        message=(
-            f"Tags pruned to current bank data ({len(ledger)} transactions). "
-            "Ledger is computed on read."
-        ),
+    msg = (
+        f"Tags pruned to current ledger ({len(ledger)} rows: {n_bank} bank, {n_manual} manual). "
+        "Ledger is computed on read."
     )
+    return UpdateLedgerResult(success=True, message=msg)
 
 
 def recreate_ledger_from_bank() -> UpdateLedgerResult:
     """
     Clear all transaction tags and remove any legacy persisted ledger table.
-    The ledger view is always derived from the bank table when the app reads data.
+    The ledger view is derived from bank + manual tables when the app reads data.
     """
     _remove_legacy_ledger_table()
     if TRANSACTION_TAGS_TABLE.exists():
         shutil.rmtree(TRANSACTION_TAGS_TABLE)
-    return UpdateLedgerResult(
-        success=True,
-        message=(
-            "All transaction tags cleared. Ledger rows come from bank data when you view the app."
-        ),
+    msg = (
+        "All transaction tags cleared. "
+        "Ledger rows come from bank and manual data when you view the app."
     )
+    return UpdateLedgerResult(success=True, message=msg)
 
 
 def refresh_ledger_and_tags() -> UpdateTagsResult:
-    """Prune tags to current bank data, remove legacy ledger storage, then reapply tag rules."""
+    """Prune tags to bank + manual ledger, drop legacy ledger files, reapply tag rules."""
     prune = update_ledger_from_bank()
     if not prune.success:
         return UpdateTagsResult(success=False, message=prune.message)

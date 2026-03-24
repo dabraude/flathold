@@ -21,7 +21,7 @@ with st.sidebar:
             "then reapply tag rules from tag_rules"
         ),
         key="view_refresh_ledger_tags",
-        use_container_width=True,
+        width="stretch",
     ):
         with st.spinner("Updating…"):
             result = refresh_ledger_and_tags()
@@ -55,7 +55,10 @@ st.title("📋 View ledger")
 existing = read_ledger_table()
 
 if existing is None or len(existing) == 0:
-    st.info("No bank data yet. Upload a CSV on **Upload statements** to view the ledger.")
+    st.info(
+        "No ledger data yet. Upload a CSV on **Upload statements** and/or add rows on "
+        "**Manual entries**."
+    )
     st.stop()
 
 only_untagged = st.checkbox(

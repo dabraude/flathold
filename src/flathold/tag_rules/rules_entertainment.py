@@ -31,7 +31,6 @@ TAG_RULES_ENTERTAINMENT: tuple[TagRule, ...] = (
             .str.contains(r"(?i)TV\s+LICENCE\s+DDA")
         ),
         amount_proportion=1,
-        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="bbc",

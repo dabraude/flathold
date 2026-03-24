@@ -19,7 +19,7 @@ with st.sidebar:
             "then reapply tag rules from tag_rules"
         ),
         key="upload_refresh_ledger_tags",
-        use_container_width=True,
+        width="stretch",
     ):
         with st.spinner("Updating…"):
             result = refresh_ledger_and_tags()

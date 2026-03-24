@@ -62,7 +62,6 @@ TAG_RULES_FOOD_GROCERIES: tuple[TagRule, ...] = (
             .str.contains(r"(?i)SP\s+CHOCOLATE\s+SHOP")
         ),
         amount_proportion=1,
-        show_on_dashboard_by_default=True,
     ),
     TagRule(
         tag="farmers-market",
