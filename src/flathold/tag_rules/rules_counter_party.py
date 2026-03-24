@@ -2,6 +2,7 @@
 
 import polars as pl
 
+from flathold.agata_weekly_manual import AGATA_WEEKLY_MANUAL_TAG_PREDICATE
 from flathold.tag_rules.core import TagRule
 
 _AMAZON_DESCRIPTION_PREDICATE = (
@@ -52,6 +53,11 @@ TAG_RULES_COUNTER_PARTY: tuple[TagRule, ...] = (
     TagRule(
         tag="amazon-spend",
         predicate=_AMAZON_DESCRIPTION_PREDICATE,
+        amount_proportion=1,
+    ),
+    TagRule(
+        tag="agata",
+        predicate=AGATA_WEEKLY_MANUAL_TAG_PREDICATE,
         amount_proportion=1,
     ),
     TagRule(

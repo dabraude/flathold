@@ -40,6 +40,7 @@ TAG_DEFINITIONS_SEED_ROWS: tuple[tuple[str, bool, bool, tuple[str, ...]], ...] =
     ("groceries", True, False, ("sector-codes",)),
     ("farmers-market", False, True, ("counter-party",)),
     ("abbis-pantry", False, True, ("counter-party",)),
+    ("agata", False, True, ("counter-party",)),
     ("waitrose", False, True, ("counter-party",)),
     ("great-grog", False, True, ("counter-party",)),
     ("google", False, True, ("counter-party",)),

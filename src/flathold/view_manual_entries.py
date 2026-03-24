@@ -38,33 +38,6 @@ st.caption(
     "`manual`. Tag rules include them."
 )
 
-st.subheader("Weekly Agata (£45)")
-st.markdown(
-    f"Creates one **MANUAL** debit of **£45** every **Monday** from the earliest date in your "
-    f"bank/manual data through today, with description `{AGATA_WEEKLY_MANUAL_DESCRIPTION}`. "
-    "Tag rules apply **cleaning** and **cash-spend**. Re-running replaces rows with ids "
-    "`manual-agata-weekly-*` (and legacy `manual-aga-weekly-*`)."
-)
-c_ag1, c_ag2 = st.columns(2)
-with c_ag1:
-    if st.button("Sync Agata weekly rows", key="sync_agata_weekly", width="stretch"):
-        with st.spinner("Writing manual ledger…"):
-            r = sync_agata_weekly_manual_entries()
-        if r.success:
-            st.success(r.message)
-            with st.spinner("Reapplying tags…"):
-                r2 = refresh_ledger_and_tags()
-            if r2.success:
-                st.success(r2.message)
-            else:
-                st.error(r2.message)
-        else:
-            st.error(r.message)
-with c_ag2:
-    st.caption("Or call `sync_agata_weekly_manual_entries()` from code.")
-
-st.divider()
-
 with st.form("add_manual_entry", clear_on_submit=True):
     c1, c2 = st.columns(2)
     with c1:
@@ -126,3 +99,30 @@ else:
     st.subheader("Stored manual rows")
     show = manual.sort(["Transaction Date", "Transaction Counter"])
     st.dataframe(show, width="stretch", hide_index=True)
+
+st.divider()
+
+st.subheader("Weekly Agata (£45)")
+st.markdown(
+    f"Creates one **MANUAL** debit of **£45** every **Monday** from the earliest date in your "
+    f"bank/manual data through today, with description `{AGATA_WEEKLY_MANUAL_DESCRIPTION}`. "
+    "Tag rules apply **cleaning** and **cash-spend**. Re-running replaces rows with ids "
+    "`manual-agata-weekly-*` (and legacy `manual-aga-weekly-*`)."
+)
+c_ag1, c_ag2 = st.columns(2)
+with c_ag1:
+    if st.button("Sync Agata weekly rows", key="sync_agata_weekly", width="stretch"):
+        with st.spinner("Writing manual ledger…"):
+            r = sync_agata_weekly_manual_entries()
+        if r.success:
+            st.success(r.message)
+            with st.spinner("Reapplying tags…"):
+                r2 = refresh_ledger_and_tags()
+            if r2.success:
+                st.success(r2.message)
+            else:
+                st.error(r2.message)
+        else:
+            st.error(r.message)
+with c_ag2:
+    st.caption("Or call `sync_agata_weekly_manual_entries()` from code.")

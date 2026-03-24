@@ -11,10 +11,18 @@ import polars as pl
 from flathold.bank_delta import read_existing_table
 from flathold.manual_ledger import read_manual_ledger_table, write_manual_ledger_table
 
-# Must stay aligned with ``_AGATA_WEEKLY_MANUAL_PREDICATE`` in ``rules_home_finance``.
 AGATA_WEEKLY_MANUAL_DESCRIPTION = "Payment to Agata - weekly cleaning (manual)"
 
 AGATA_WEEKLY_DEBIT = 45.0
+
+# Matches programmatic weekly rows and legacy description text that used "Aga".
+AGATA_WEEKLY_MANUAL_TAG_PREDICATE: pl.Expr = (
+    (pl.col("Transaction Type") == "MANUAL")
+    & (pl.col("Debit Amount") == AGATA_WEEKLY_DEBIT)
+    & pl.col("Transaction Description")
+    .str.strip_chars()
+    .str.contains(r"(?i)Payment to Aga(ta)?.*weekly cleaning.*\(manual\)")
+)
 AGATA_WEEKLY_ID_PREFIX = "manual-agata-weekly-"
 # Legacy ids from before the name was corrected; still stripped on sync.
 _LEGACY_AGA_WEEKLY_ID_PREFIX = "manual-aga-weekly-"
