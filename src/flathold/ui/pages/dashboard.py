@@ -6,29 +6,23 @@ import altair as alt
 import polars as pl
 import streamlit as st
 
-from flathold.analytics.allocations.uncategorised_sector import (
-    uncategorised_sector_daily_allocations,
-)
-from flathold.analytics.allocations.unknown_cash import (
-    unknown_cash_daily_allocations,
-)
-from flathold.analytics.allocations.untagged_spend import (
-    untagged_spend_daily_allocations,
-)
 from flathold.analytics.dashboard_metrics import (
-    TaggedUniqueMonthlyAvgInput,
-    avg_monthly_tagged_unique_debit,
     clamp_range,
     first_of_month,
-    inclusive_day_spine,
     shift_months_first,
     to_date,
 )
+from flathold.analytics.dashboard_views import (
+    RuleTagSpendMetricsInput,
+    all_tags_for_dashboard,
+    avg_monthly_ledger_expenditure,
+    build_dashboard_allocation_long,
+    chart_and_bar_for_selected_tags,
+    monthly_debits_in_range,
+    spend_metrics_for_rule_tags,
+)
 from flathold.core.tag_group import TagGroup
-from flathold.data.tables.bank_table import read_existing_table
-from flathold.data.tables.tag_definitions_table import read_tag_rule_metadata_map
-from flathold.data.tables.transaction_tags_table import read_transaction_tags_table
-from flathold.data.views.ledger_view import read_ledger_view
+from flathold.services.dashboard_service import bank_statement_row_count, get_dashboard_inputs
 from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Dashboard", page_icon="🏦", layout="wide")
@@ -42,7 +36,6 @@ def _tag_group_button_label(group: TagGroup) -> str:
     return group.value.replace("-", " ").title()
 
 
-# Defaults match Streamlit's `theme.chartCategoricalColors` docs (config.py).
 _STREAMLIT_CHART_CATEGORICAL_LIGHT: tuple[str, ...] = (
     "#0068c9",
     "#83c9ff",
@@ -70,7 +63,6 @@ _STREAMLIT_CHART_CATEGORICAL_DARK: tuple[str, ...] = (
 
 
 def _streamlit_chart_categorical_palette() -> tuple[str, ...]:
-    """Palette used by ``st.line_chart`` / built-in charts (theme + light/dark defaults)."""
     raw = st.get_option("theme.chartCategoricalColors")
     if isinstance(raw, (list, tuple)) and len(raw) > 0:
         return tuple(str(c) for c in raw)
@@ -81,7 +73,6 @@ def _streamlit_chart_categorical_palette() -> tuple[str, ...]:
 
 
 def _tag_color_scale(selected_tags: tuple[str, ...]) -> alt.Scale:
-    """Same colour order as ``st.line_chart(..., y=list(selected))``."""
     palette = _streamlit_chart_categorical_palette()
     n = len(palette)
     colors = [palette[i % n] for i in range(len(selected_tags))]
@@ -94,7 +85,6 @@ def _tag_line_chart(
     selected_tags: tuple[str, ...],
     value_tooltip_title: str = "Amount",
 ) -> alt.Chart:
-    """Line chart with a bottom, multi-column legend so long tag lists stay on-screen."""
     long_df = chart_df.unpivot(
         on=list(selected_tags),
         index="period",
@@ -140,7 +130,6 @@ def _tag_bar_chart_pounds(
     ratio_denominator: float,
     selected_tags: tuple[str, ...],
 ) -> alt.Chart | alt.LayerChart:
-    """Vertical bars: £ on the left; right axis is value / ``ratio_denominator``."""
     n = len(bar_df)
     height = max(280, min(420, 180 + 28 * n))
     bars = (
@@ -216,15 +205,17 @@ st.caption(
     "Use the shortcuts or date picker for the metric and chart; then choose tags for the chart."
 )
 
-ledger = read_ledger_view()
-tags_df = read_transaction_tags_table()
-
-if ledger is None or len(ledger) == 0:
+inputs = get_dashboard_inputs()
+if inputs is None:
     st.info(
         "No ledger data yet. Upload a CSV on **Upload statements** and/or add rows on "
         "**Manual entries**."
     )
     st.stop()
+
+ledger = inputs.ledger
+tags_df = inputs.tags_df
+tag_meta = inputs.tag_meta
 
 ledger_periods = ledger.with_columns(
     pl.date(pl.col("year"), pl.col("month"), 1).alias("period"),
@@ -324,16 +315,8 @@ hi = first_of_month(range_end)
 if lo > hi:
     lo, hi = hi, lo
 
-monthly_debit_totals = (
-    ledger.group_by(["year", "month"])
-    .agg(
-        pl.col("Debit Amount").sum().alias("monthly_debit"),
-    )
-    .with_columns(pl.date(pl.col("year"), pl.col("month"), 1).alias("period"))
-)
-monthly_in_range = monthly_debit_totals.filter((pl.col("period") >= lo) & (pl.col("period") <= hi))
-monthly_debits = monthly_in_range.get_column("monthly_debit").to_list()
-avg_display = float(sum(monthly_debits) / len(monthly_debits)) if monthly_debits else 0.0
+monthly_in_range = monthly_debits_in_range(ledger, lo, hi)
+avg_display = avg_monthly_ledger_expenditure(ledger, lo, hi)
 st.metric(
     "Total average monthly expenditure",
     f"£{avg_display:,.2f}",
@@ -344,40 +327,27 @@ if tags_df is None or len(tags_df) == 0:
     st.info("No transaction tags yet. Use **Update** in the sidebar (after bank data is uploaded).")
     st.stop()
 
-tag_meta = read_tag_rule_metadata_map()
-period_cols = ledger.select(["id", "year", "month", "day"]).unique()
-joined = tags_df.join(period_cols, on="id", how="inner").with_columns(
-    pl.date(pl.col("year"), pl.col("month"), pl.col("day")).alias("period"),
+agg_long = build_dashboard_allocation_long(
+    ledger,
+    tags_df,
+    tag_meta,
+    range_start,
+    range_end,
 )
-agg_from_rules = joined.group_by(["period", "tag"]).agg(
-    pl.col("allocation").sum().alias("allocation")
-)
-unknown_daily = unknown_cash_daily_allocations(tags_df, period_cols, range_start, range_end)
-untagged_daily = untagged_spend_daily_allocations(ledger, tags_df, range_start, range_end)
-uncategorised_daily = uncategorised_sector_daily_allocations(
-    ledger, tags_df, range_start, range_end, tag_meta
-)
-agg = pl.concat(
-    [agg_from_rules, unknown_daily, untagged_daily, uncategorised_daily], how="vertical"
-)
-calculated_tag_names = {t for t, m in tag_meta.items() if m.calculated}
-all_tags = sorted(set(agg["tag"].unique().to_list()) | calculated_tag_names)
+all_tags = all_tags_for_dashboard(agg_long, tag_meta)
 
 if not all_tags:
     st.info("No tags to chart after joining with the ledger.")
     st.stop()
 
-agg_chart = agg.filter(
+agg_chart = agg_long.filter(
     (pl.col("period") >= pl.lit(range_start)) & (pl.col("period") <= pl.lit(range_end)),
 )
 all_tags_in_range = sorted(agg_chart["tag"].unique().to_list())
 sector_default_tags = [t for t in all_tags_in_range if TagGroup.SECTOR_CODES in tag_meta[t].groups]
 if "dashboard_tags" not in st.session_state:
-    # Match the "Sector-codes" group button behavior exactly.
     st.session_state.dashboard_tags = list(sector_default_tags)
 
-# Apply group filter before the multiselect — cannot assign `dashboard_tags` after the widget
-# with that key is instantiated (StreamlitAPIException).
 pending_group = st.session_state.pop("_dashboard_apply_group", None)
 if pending_group is not None:
     try:
@@ -388,7 +358,6 @@ if pending_group is not None:
         picked = [t for t in all_tags_in_range if g in tag_meta[t].groups]
         st.session_state.dashboard_tags = list(picked)
 
-# Keep the user's tag selection when the date range changes; drop unknown tags only.
 _tags_valid = [t for t in st.session_state.dashboard_tags if t in all_tags]
 st.session_state.dashboard_tags = _tags_valid
 
@@ -423,78 +392,31 @@ if not selected:
     st.warning("Select at least one tag to see the chart.")
     st.stop()
 
-day_spine = inclusive_day_spine(range_start, range_end)
-if day_spine.is_empty():
-    st.info("No days in the selected date range.")
-    st.stop()
-
-pivoted = (
-    agg_chart.filter(pl.col("tag").is_in(selected))
-    .pivot(on="tag", index="period", values="allocation")
-    .sort("period")
+bundle = chart_and_bar_for_selected_tags(
+    agg_long,
+    ledger,
+    range_start,
+    range_end,
+    tuple(selected),
 )
-if pivoted.is_empty():
-    chart_df = day_spine.with_columns(*[pl.lit(0.0).alias(t) for t in selected])
-else:
-    for tag in selected:
-        if tag not in pivoted.columns:
-            pivoted = pivoted.with_columns(pl.lit(0.0).alias(tag))
-        else:
-            pivoted = pivoted.with_columns(pl.col(tag).fill_null(0.0))
-    pivoted = pivoted.select(["period", *selected])
-    chart_df = day_spine.join(pivoted, on="period", how="left")
-    for tag in selected:
-        chart_df = chart_df.with_columns(pl.col(tag).fill_null(0.0))
+chart_df = bundle.chart_df
+bar_df = bundle.bar_df
+ratio_denominator = bundle.ratio_denominator
 
-ledger_in_range = ledger.with_columns(
-    pl.date(pl.col("year"), pl.col("month"), pl.col("day")).alias("txn_date")
-).filter((pl.col("txn_date") >= pl.lit(range_start)) & (pl.col("txn_date") <= pl.lit(range_end)))
-total_debit = float(ledger_in_range.select(pl.col("Debit Amount").sum()).item() or 0.0)
-
-tag_totals_df = (
-    agg_chart.filter(pl.col("tag").is_in(selected))
-    .group_by("tag")
-    .agg(pl.col("allocation").sum().alias("amount"))
+spend = spend_metrics_for_rule_tags(
+    RuleTagSpendMetricsInput(
+        ledger=ledger,
+        tags_df=tags_df,
+        tag_meta=tag_meta,
+        selected_tags=tuple(selected),
+        lo=lo,
+        hi=hi,
+        monthly_in_range=monthly_in_range,
+    ),
 )
-tag_amounts = {str(row[0]): float(row[1]) for row in tag_totals_df.iter_rows()}
-
-n_days = chart_df.height
-if n_days > 0:
-    bar_allocated = [tag_amounts.get(t, 0.0) / n_days for t in selected]
-    ratio_denominator = total_debit / n_days
-else:
-    bar_allocated = [0.0 for t in selected]
-    ratio_denominator = 0.0
-
-bar_df = pl.DataFrame(
-    {
-        "tag": selected,
-        "allocated": bar_allocated,
-    }
-)
-
-n_months_metric = monthly_in_range.height
-
-rule_selected = tuple(t for t in selected if tag_meta.get(t) is None or not tag_meta[t].calculated)
-if rule_selected:
-    # Match previous "Average tagged monthly expenditure" semantics:
-    # count each transaction once per calendar month even if it has multiple selected tags.
-    avg_tagged = avg_monthly_tagged_unique_debit(
-        TaggedUniqueMonthlyAvgInput(
-            ledger=ledger,
-            tags_df=tags_df,
-            selected_tags=rule_selected,
-            period_cols=period_cols,
-            lo=lo,
-            hi=hi,
-            monthly_in_range=monthly_in_range,
-        ),
-    )
-    avg_spend = avg_tagged
-    total_spend = avg_tagged * float(n_months_metric)
-else:
-    avg_spend = None
-    total_spend = None
+total_spend = spend.total_spend
+avg_spend = spend.avg_spend_per_month
+n_months_metric = spend.n_months_in_range
 
 metric_cols = st.columns(2)
 with metric_cols[0]:
@@ -552,9 +474,8 @@ with line_col:
         width="stretch",
     )
 
-bank = read_existing_table()
-if bank is not None and len(bank) > 0:
-    n = len(bank)
+n_bank = bank_statement_row_count()
+if n_bank is not None:
     st.caption(
-        f"Bank Delta table: **{n}** statement row(s). Use **Upload statements** to add data."
+        f"Bank Delta table: **{n_bank}** statement row(s). Use **Upload statements** to add data."
     )

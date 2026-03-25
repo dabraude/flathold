@@ -3,12 +3,12 @@
 import polars as pl
 import streamlit as st
 
-from flathold.data.tables.tag_definitions_table import (
-    ensure_tag_definitions_table,
-    read_tag_definitions_table,
-    reset_tag_definitions_to_seed,
+from flathold.services.tag_definitions_service import (
+    merge_seed_tags,
+    read_definitions_dataframe,
+    reset_to_seed,
+    rule_tag_names,
 )
-from flathold.tag_rules.rules import TAG_RULES
 
 _INFO_TAG_PREVIEW = 20
 
@@ -24,7 +24,7 @@ def _reset_tags_dialog() -> None:
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Confirm reset", type="primary", width="stretch", key="reset_confirm"):
-            reset_tag_definitions_to_seed()
+            reset_to_seed()
             st.session_state["_tags_just_reset"] = True
             st.rerun()
     with c2:
@@ -40,7 +40,7 @@ with st.sidebar:
         key="tags_merge_seed",
         width="stretch",
     ):
-        ensure_tag_definitions_table()
+        merge_seed_tags()
         st.rerun()
     if st.button(
         "Reset tags to seed",
@@ -55,8 +55,8 @@ st.title("🏷️ Tags")
 if st.session_state.pop("_tags_just_reset", False):
     st.success("Tag definitions were reset from the code seed.")
 
-df = read_tag_definitions_table()
-rule_tags = {r.tag for r in TAG_RULES}
+df = read_definitions_dataframe()
+rule_tags = rule_tag_names()
 def_tags = set(df["tag"].to_list())
 only_in_rules = rule_tags - def_tags
 only_in_def = def_tags - rule_tags

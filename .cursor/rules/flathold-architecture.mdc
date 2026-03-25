@@ -8,8 +8,14 @@ alwaysApply: true
 ## Layers and allowed dependencies
 
 - **`flathold/ui/**`**: Streamlit UI only.
-  - May import: `flathold/services/*`, `flathold/data/views/*`, `flathold/analytics/*`, `flathold/core/*`, `flathold/tag_rules/*`.
+  - May import only: `flathold/services/*`, `flathold/analytics/*`, `flathold/core/*`.
+  - Must not import: `flathold/data/**` (tables or views), `flathold/tag_rules/**` — use `services` for persistence, derived reads, and tag-rule orchestration.
   - Must not: write Delta tables, delete under `db/`, or contain business/persistence logic.
+  - Must: obtain metrics and chart series from `flathold/analytics` (analytic views and outputs derived from the enhanced ledger model).
+  - Must not: implement analytics in UI modules (including multi-step Polars pipelines for metrics, allocations, or chart series).
+  - May: apply only trivial operations on analytic outputs — filtering, date-range selection, `sum` / `mean`, and presentation (Streamlit/Altair wiring, formatting).
+  - Must: alter persistant data via a `service`
+  - Existing pages that violate the analytics boundary are technical debt to refactor; do not add new violations.
 
 - **`flathold/services/**`**: orchestration/use-cases (no Streamlit).
   - May import: `flathold/data/tables/*`, `flathold/data/views/*`, `flathold/analytics/*`, `flathold/core/*`, `flathold/tag_rules/*`.
@@ -19,8 +25,10 @@ alwaysApply: true
 
 - **`flathold/data/views/**`**: derived datasets computed on read (no writes).
   - Must not: write Delta tables or mutate persisted state.
+  - `ledger_view` is only the simple join of persisted sources plus stored tags as `tags: List[str]`; no calculated-tag materialization here.
 
 - **`flathold/analytics/**`**: pure Polars transforms (no IO, no Streamlit).
+  - Base ledger input comes from `flathold/data/views` only; **enhanced ledger** (base ledger + allocations + tag metadata + calculated-tag derivation) and **analytic views** (narrow aggregates for screens) live here (including submodules).
 
 - **`flathold/core/**`**: business concepts + invariants (no IO, no Streamlit).
 
@@ -36,3 +44,8 @@ alwaysApply: true
   - base ledger = `bank ∪ manual_ledger` (union) with stable `id`, and `ledger_source`
   - attach tags by aggregating `transaction_tags` per `id` and **left-joining** to add `tags: List[str]`
 - Do not persist a ledger Delta table as a source of truth.
+
+## Enhanced ledger and analytic views
+
+- **Enhanced ledger** and calculated-tag logic belong in `flathold/analytics/`, not in `data/views/`.
+- **Analytic views** (chart-ready / metric-ready frames) belong in `flathold/analytics/`; UI must call into analytics for those outputs, not reimplement them.

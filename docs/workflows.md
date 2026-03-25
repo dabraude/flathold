@@ -19,11 +19,11 @@ This is a use-case: it mutates the `transaction_tags` table based on rules and c
 - **Persisted writes**: `src/flathold/data/tables/transaction_tags_table.py`
 
 ## View ledger
-- **Derived read model**: `src/flathold/data/views/ledger_view.py` (`read_ledger_view()`)
+- **Derived read model**: `src/flathold/data/views/ledger_view.py` (`read_ledger_view()`), called from **`services`** (UI does not import `flathold/data`).
 - **Presentation transform**: `src/flathold/ui/presenters/ledger_presenter.py`
 - **UI**: `src/flathold/ui/pages/view_ledger.py`
 
 ## Dashboard
-- **Derived read models**: `data/views/ledger_view.py`, `data/tables/transaction_tags_table.py`
-- **Pure transforms**: `src/flathold/analytics/` (daily allocations, rollups, chart-ready datasets)
-- **UI**: `src/flathold/ui/pages/dashboard.py`
+- **Inputs**: base ledger, `transaction_tags`, and tag metadata are read via **`services`** (and passed into `analytics` as needed); UI imports only `services`, `analytics`, and `core`.
+- **Enhanced ledger and analytic views**: `src/flathold/analytics/` — combine base ledger with allocations and tag definitions, derive calculated tags, expose narrow aggregates (daily/monthly series, rollups) for charts and metrics.
+- **UI**: `src/flathold/ui/pages/dashboard.py` — must consume those analytic outputs and apply only trivial operations (filter, date range, sum/mean, chart wiring). Until refactored, some logic may still live in the page as technical debt; see `docs/architecture.md`.

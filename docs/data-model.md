@@ -35,6 +35,20 @@ Derived views must live in `src/flathold/data/views/`. They are **not a source o
 - **Bank-derived ledger rows**: `id` must be deterministic from the bank row content so it is stable across runs.
 - **Manual ledger rows**: `id` is generated once and stored (e.g. prefixed `manual-...`); it must be stable across runs.
 
+## Analytics layer (not persisted)
+
+The **base ledger** above is the only “ledger” under `data/views/`: a join of persisted tables plus stored tags as `tags: List[str]`. It does **not** include **calculated** tags.
+
+**Enhanced ledger** (built in `src/flathold/analytics/`, not under `data/views/`): an in-memory model that combines:
+
+- the base ledger (from `read_ledger_view()`),
+- **allocation-level** `transaction_tags` (long form: `id`, `tag`, `allocation`, …),
+- **tag metadata** from `tag_definitions` (e.g. `calculated`, groups).
+
+That is where **calculated tags** are derived — tags that must **not** appear in persisted `transaction_tags` (see `tag_rules` validation). Calculated tags are **not** extra columns on a Delta table; they are computed in analytics and may appear as synthetic daily allocation rows or other long-form series. Current homes include modules under `src/flathold/analytics/allocations/`.
+
+**Analytic views**: named transforms on top of the enhanced ledger (or explicit frames derived from it) that return chart-ready or metric-ready Polars frames — e.g. daily allocations per tag, monthly rollups. Pages should consume these and apply only trivial operations (filter, date range, sum, mean); see `docs/architecture.md`.
+
 ## UI-specific presentation (not a view)
 
 Some transformations exist only for display. For example, the View ledger page splits `tags` into:

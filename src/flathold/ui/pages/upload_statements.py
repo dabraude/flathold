@@ -2,11 +2,7 @@
 
 import streamlit as st
 
-from flathold.data.tables.bank_table import (
-    load_csv_bytes_to_dataframe,
-    read_existing_table,
-    save_to_delta,
-)
+from flathold.services.bank_service import load_csv_bytes, read_bank_table, save_bank_to_delta
 from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Upload statements", page_icon="📤", layout="wide")
@@ -40,9 +36,9 @@ uploaded = st.file_uploader(
 
 if uploaded is not None:
     try:
-        df = load_csv_bytes_to_dataframe(uploaded.read())
+        df = load_csv_bytes(uploaded.read())
         with st.spinner("Saving…"):
-            result = save_to_delta(df)
+            result = save_bank_to_delta(df)
 
         msg = (
             f"Done. **{len(df)}** rows in file → **{result.new_rows}** added, "
@@ -53,8 +49,7 @@ if uploaded is not None:
         st.error(f"Upload failed: {e}")
         raise
 
-# Show current table size
-existing = read_existing_table()
+existing = read_bank_table()
 if existing is not None:
     st.info(f"Delta table currently has **{len(existing)}** transactions.")
 else:

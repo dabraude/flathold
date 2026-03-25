@@ -3,7 +3,8 @@
 import polars as pl
 import streamlit as st
 
-from flathold.data.views.ledger_view import read_ledger_view
+from flathold.services.ledger_service import get_ledger_view
+from flathold.services.tag_definitions_service import get_tag_rule_metadata_map
 from flathold.services.tagging_service import refresh_ledger_and_tags
 from flathold.ui.presenters.ledger_presenter import (
     LEDGER_VIEW_COUNTER_PARTY_COLUMN,
@@ -48,12 +49,12 @@ MONTH_NAMES = (
 
 
 def _month_label(month_num: int) -> str:
-    """Turn month number (1-12) into e.g. 'Jan'."""
     return MONTH_NAMES[month_num - 1]
 
 
 st.title("📋 View ledger")
-existing = read_ledger_view()
+tag_meta = get_tag_rule_metadata_map()
+existing = get_ledger_view()
 
 if existing is None or len(existing) == 0:
     st.info(
@@ -76,7 +77,6 @@ only_without_counter_party = st.checkbox(
     key="view_ledger_only_without_counter_party",
 )
 
-# Tabs: year → month (ledger has year, month columns)
 year_month = existing.select(["year", "month"]).unique().sort(["year", "month"])
 years_sorted = year_month["year"].unique().to_list()
 
@@ -89,9 +89,9 @@ for i, year in enumerate(years_sorted):
             with month_tabs[j]:
                 subset = existing.filter((pl.col("year") == year) & (pl.col("month") == month_num))
                 if only_untagged:
-                    subset = subset.filter(ledger_non_counterparty_tag_count_expr() == 0)
+                    subset = subset.filter(ledger_non_counterparty_tag_count_expr(tag_meta) == 0)
                 subset = subset.sort(["Transaction Date", "Transaction Counter"])
-                view_df = ledger_to_ledger_view(subset)
+                view_df = ledger_to_ledger_view(subset, tag_meta=tag_meta)
                 if only_without_counter_party:
                     view_df = view_df.filter(
                         pl.col(LEDGER_VIEW_COUNTER_PARTY_COLUMN).list.len() == 0

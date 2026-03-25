@@ -1,36 +1,45 @@
 """Ledger rows prepared for the View ledger page (split tags + display styling)."""
 
+from collections.abc import Mapping
+
 import pandas as pd
 import polars as pl
 from pandas.io.formats.style import Styler
 
-from flathold.data.tables.tag_definitions_table import read_tag_rule_metadata_map
-from flathold.tag_rules import TagGroup, tag_groups
+from flathold.core.tag_group import TagGroup
+from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 LEDGER_VIEW_COUNTER_PARTY_COLUMN = "Counter Party"
 LEDGER_VIEW_TAGS_COLUMN = "Tags"
 LEDGER_SOURCE_COLUMN = "ledger_source"
 
 
-def _counterparty_column_tag_names() -> frozenset[str]:
-    """Names that map to the Counter Party column (``ledger_to_ledger_view`` split)."""
-    meta = read_tag_rule_metadata_map()
-    return frozenset({name for name, m in meta.items() if TagGroup.COUNTER_PARTY in m.groups})
+def _counterparty_column_tag_names(tag_meta: Mapping[str, TagRuleMetadata]) -> frozenset[str]:
+    """Tag names whose metadata includes the counter-party group."""
+    return frozenset({name for name, m in tag_meta.items() if TagGroup.COUNTER_PARTY in m.groups})
 
 
-def ledger_non_counterparty_tag_count_expr(tags_column: str = "tags") -> pl.Expr:
+def _tag_groups_for_tag(tag: str, tag_meta: Mapping[str, TagRuleMetadata]) -> tuple[TagGroup, ...]:
+    m = tag_meta.get(tag)
+    return () if m is None else m.groups
+
+
+def ledger_non_counterparty_tag_count_expr(
+    tag_meta: Mapping[str, TagRuleMetadata],
+    tags_column: str = "tags",
+) -> pl.Expr:
     """Polars expression: count of tags per row that belong in ``Tags``, not ``Counter Party``."""
-    cp = _counterparty_column_tag_names()
+    cp = _counterparty_column_tag_names(tag_meta)
     inner = pl.element().is_in(list(cp)).not_().cast(pl.UInt32)
     return pl.col(tags_column).list.eval(inner).list.sum()
 
 
-def ledger_to_ledger_view(ledger: pl.DataFrame) -> pl.DataFrame:
-    """Split ledger ``tags`` into ``Tags`` and ``Counter Party`` columns using rule ``groups``.
-
-    Tags whose rule includes ``TagGroup.COUNTER_PARTY`` (including when added in
-    ``TagRule.__post_init__``) go to the counter party column.
-    """
+def ledger_to_ledger_view(
+    ledger: pl.DataFrame,
+    *,
+    tag_meta: Mapping[str, TagRuleMetadata],
+) -> pl.DataFrame:
+    """Split ``tags`` into ``Tags`` and ``Counter Party`` using tag definition groups."""
     if "tags" not in ledger.columns:
         return ledger
 
@@ -43,8 +52,8 @@ def ledger_to_ledger_view(ledger: pl.DataFrame) -> pl.DataFrame:
             counter_party.append([])
             continue
         tags = [str(t) for t in cell]
-        cp = [t for t in tags if TagGroup.COUNTER_PARTY in tag_groups(t)]
-        rest = [t for t in tags if TagGroup.COUNTER_PARTY not in tag_groups(t)]
+        cp = [t for t in tags if TagGroup.COUNTER_PARTY in _tag_groups_for_tag(t, tag_meta)]
+        rest = [t for t in tags if TagGroup.COUNTER_PARTY not in _tag_groups_for_tag(t, tag_meta)]
         other.append(rest)
         counter_party.append(cp)
 

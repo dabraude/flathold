@@ -9,8 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Uploaded data
-data/
-db/
+# Uploaded data (repo root only — not src/flathold/data)
+/data/
+/db/
 
 __marimo__/

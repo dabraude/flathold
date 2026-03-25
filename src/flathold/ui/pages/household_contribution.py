@@ -7,11 +7,11 @@ import polars as pl
 import streamlit as st
 
 from flathold.bank_account_metrics import compute_bank_account_metrics
-from flathold.data.tables.bank_table import read_existing_table
-from flathold.data.tables.household_split_settings_table import (
+from flathold.services.household_service import (
     HouseholdSplitSettings,
-    read_household_split_settings,
-    write_household_split_settings,
+    read_bank_for_household,
+    read_household_settings,
+    save_household_settings,
 )
 from flathold.services.tagging_service import refresh_ledger_and_tags
 
@@ -72,7 +72,7 @@ st.caption(
     "Sundries are added, then the total is split by annual salary (Dave / Claire)."
 )
 
-bank = read_existing_table()
+bank = read_bank_for_household()
 if bank is None or len(bank) == 0:
     st.info("No bank data yet. Upload a CSV on **Upload statements**.")
     st.stop()
@@ -80,7 +80,7 @@ if bank is None or len(bank) == 0:
 bounds = _bank_date_bounds(bank)
 period_min, period_max = bounds.period_min, bounds.period_max
 
-saved = read_household_split_settings()
+saved = read_household_settings()
 
 if "hc_date_range" not in st.session_state:
     if saved is not None:
@@ -153,7 +153,7 @@ if range_start > range_end:
 range_start, range_end = _clamp_range(range_start, range_end, period_min, period_max)
 
 if st.button("Save settings", type="primary", key="hc_save_settings"):
-    write_household_split_settings(
+    save_household_settings(
         HouseholdSplitSettings(
             salary_dave_annual_gbp=float(st.session_state.hc_salary_dave),
             salary_claire_annual_gbp=float(st.session_state.hc_salary_claire),

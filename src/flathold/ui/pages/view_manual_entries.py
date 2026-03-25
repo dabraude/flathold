@@ -6,10 +6,10 @@ from flathold.agata_weekly_manual import (
     AGATA_WEEKLY_MANUAL_DESCRIPTION,
     sync_agata_weekly_manual_entries,
 )
-from flathold.data.tables.manual_ledger_table import (
+from flathold.services.manual_ledger_service import (
     ManualLedgerAppendInput,
-    append_manual_ledger_row,
-    read_manual_ledger_table,
+    append_manual_row,
+    read_manual_ledger,
 )
 from flathold.services.tagging_service import refresh_ledger_and_tags
 
@@ -69,7 +69,7 @@ with st.form("add_manual_entry", clear_on_submit=True):
         if not tx_date.strip() or not desc.strip():
             st.error("Transaction date and description are required.")
         else:
-            out = append_manual_ledger_row(
+            out = append_manual_row(
                 ManualLedgerAppendInput(
                     transaction_date=tx_date.strip(),
                     transaction_description=desc.strip(),
@@ -92,7 +92,7 @@ with st.form("add_manual_entry", clear_on_submit=True):
             else:
                 st.error(out.message)
 
-manual = read_manual_ledger_table()
+manual = read_manual_ledger()
 if manual is None or len(manual) == 0:
     st.info("No manual entries yet. Use the form above to add one.")
 else:
