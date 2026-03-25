@@ -6,12 +6,12 @@ from flathold.agata_weekly_manual import (
     AGATA_WEEKLY_MANUAL_DESCRIPTION,
     sync_agata_weekly_manual_entries,
 )
-from flathold.ledger_delta import refresh_ledger_and_tags
-from flathold.manual_ledger import (
+from flathold.data.tables.manual_ledger_table import (
     ManualLedgerAppendInput,
     append_manual_ledger_row,
     read_manual_ledger_table,
 )
+from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Manual entries", page_icon="✏️", layout="wide")
 

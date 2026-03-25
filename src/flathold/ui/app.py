@@ -4,36 +4,36 @@ from pathlib import Path
 
 import streamlit as st
 
-_ROOT = Path(__file__).resolve().parent
+_PAGES = Path(__file__).resolve().parent / "pages"
 
 dashboard_page = st.Page(
-    _ROOT / "dashboard.py",
+    _PAGES / "dashboard.py",
     title="Dashboard",
     icon="🏦",
     default=True,
 )
 upload_page = st.Page(
-    _ROOT / "upload_statements.py",
+    _PAGES / "upload_statements.py",
     title="Upload statements",
     icon="📤",
 )
 manual_page = st.Page(
-    _ROOT / "view_manual_entries.py",
+    _PAGES / "view_manual_entries.py",
     title="Manual entries",
     icon="✏️",
 )
 ledger_page = st.Page(
-    _ROOT / "view_ledger.py",
+    _PAGES / "view_ledger.py",
     title="View ledger",
     icon="📋",
 )
 tags_page = st.Page(
-    _ROOT / "view_tags.py",
+    _PAGES / "view_tags.py",
     title="Tags",
     icon="🏷️",
 )
 household_contribution_page = st.Page(
-    _ROOT / "household_contribution.py",
+    _PAGES / "household_contribution.py",
     title="Household contribution",
     icon="💷",
 )

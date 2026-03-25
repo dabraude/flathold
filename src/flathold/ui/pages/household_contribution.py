@@ -7,13 +7,13 @@ import polars as pl
 import streamlit as st
 
 from flathold.bank_account_metrics import compute_bank_account_metrics
-from flathold.bank_delta import read_existing_table
-from flathold.household_split_store import (
+from flathold.data.tables.bank_table import read_existing_table
+from flathold.data.tables.household_split_settings_table import (
     HouseholdSplitSettings,
     read_household_split_settings,
     write_household_split_settings,
 )
-from flathold.ledger_delta import refresh_ledger_and_tags
+from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Household contribution", page_icon="💷", layout="wide")
 

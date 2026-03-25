@@ -4,7 +4,7 @@ import pandas as pd
 import polars as pl
 from pandas.io.formats.style import Styler
 
-from flathold.tag_definitions_store import read_tag_rule_metadata_map
+from flathold.data.tables.tag_definitions_table import read_tag_rule_metadata_map
 from flathold.tag_rules import TagGroup, tag_groups
 
 LEDGER_VIEW_COUNTER_PARTY_COLUMN = "Counter Party"

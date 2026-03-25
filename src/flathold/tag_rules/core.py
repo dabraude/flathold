@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from flathold.tag_group import TagGroup
-from flathold.tag_pattern import validate_kebab_tag
-from flathold.tag_rule_metadata import TagRuleMetadata
+from flathold.core.tag_group import TagGroup
+from flathold.core.tag_pattern import validate_kebab_tag
+from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 # Float tolerance when comparing summed allocations to |Debit + Credit|.
 _GROUP_ALLOC_EPS = 1e-6

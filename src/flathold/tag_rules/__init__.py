@@ -2,14 +2,14 @@
 
 import polars as pl
 
-from flathold.tag_definitions_store import (
+from flathold.core.tag_pattern import KEBAB_TAG_PATTERN
+from flathold.core.tag_rule_metadata import TagRuleMetadata
+from flathold.data.tables.tag_definitions_table import (
     metadata_map_covers_rules,
     read_tag_rule_metadata_map,
     tag_counter_party,
     tag_groups,
 )
-from flathold.tag_pattern import KEBAB_TAG_PATTERN
-from flathold.tag_rule_metadata import TagRuleMetadata
 from flathold.tag_rules.core import (
     TagRule,
     validate_at_most_one_counter_party_tag_per_transaction,

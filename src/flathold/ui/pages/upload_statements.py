@@ -2,12 +2,12 @@
 
 import streamlit as st
 
-from flathold.bank_delta import (
+from flathold.data.tables.bank_table import (
     load_csv_bytes_to_dataframe,
     read_existing_table,
     save_to_delta,
 )
-from flathold.ledger_delta import refresh_ledger_and_tags
+from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Upload statements", page_icon="📤", layout="wide")
 

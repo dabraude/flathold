@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-APP_PATH = Path(__file__).resolve().parent / "app.py"
+APP_PATH = Path(__file__).resolve().parent / "ui" / "app.py"
 
 
 def main() -> None:

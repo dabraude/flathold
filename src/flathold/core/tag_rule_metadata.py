@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from flathold.tag_group import TagGroup
+from flathold.core.tag_group import TagGroup
 
 
 @dataclass(frozen=True, slots=True)

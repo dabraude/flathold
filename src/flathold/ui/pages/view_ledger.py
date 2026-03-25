@@ -3,8 +3,9 @@
 import polars as pl
 import streamlit as st
 
-from flathold.ledger_delta import read_ledger_table, refresh_ledger_and_tags
-from flathold.ledger_view import (
+from flathold.data.views.ledger_view import read_ledger_view
+from flathold.services.tagging_service import refresh_ledger_and_tags
+from flathold.ui.presenters.ledger_presenter import (
     LEDGER_VIEW_COUNTER_PARTY_COLUMN,
     ledger_non_counterparty_tag_count_expr,
     ledger_to_ledger_view,
@@ -52,7 +53,7 @@ def _month_label(month_num: int) -> str:
 
 
 st.title("📋 View ledger")
-existing = read_ledger_table()
+existing = read_ledger_view()
 
 if existing is None or len(existing) == 0:
     st.info(

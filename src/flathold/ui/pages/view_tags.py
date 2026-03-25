@@ -3,7 +3,7 @@
 import polars as pl
 import streamlit as st
 
-from flathold.tag_definitions_store import (
+from flathold.data.tables.tag_definitions_table import (
     ensure_tag_definitions_table,
     read_tag_definitions_table,
     reset_tag_definitions_to_seed,

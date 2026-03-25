@@ -8,8 +8,8 @@ from datetime import date
 
 import polars as pl
 
-from flathold.tag_group import TagGroup
-from flathold.tag_rule_metadata import TagRuleMetadata
+from flathold.core.tag_group import TagGroup
+from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 UNCATEGORISED_SECTOR_TAG = "uncategorised-sector"
 

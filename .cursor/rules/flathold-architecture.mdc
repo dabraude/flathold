@@ -1,0 +1,38 @@
+---
+description: Flathold architecture (layers, naming, IO boundaries)
+alwaysApply: true
+---
+
+# Flathold architecture rules
+
+## Layers and allowed dependencies
+
+- **`flathold/ui/**`**: Streamlit UI only.
+  - May import: `flathold/services/*`, `flathold/data/views/*`, `flathold/analytics/*`, `flathold/core/*`, `flathold/tag_rules/*`.
+  - Must not: write Delta tables, delete under `db/`, or contain business/persistence logic.
+
+- **`flathold/services/**`**: orchestration/use-cases (no Streamlit).
+  - May import: `flathold/data/tables/*`, `flathold/data/views/*`, `flathold/analytics/*`, `flathold/core/*`, `flathold/tag_rules/*`.
+
+- **`flathold/data/tables/**`**: persisted **source-of-truth** datasets (Delta IO + schema validation).
+  - Only place that may call `write_deltalake` or delete Delta directories under `db/`.
+
+- **`flathold/data/views/**`**: derived datasets computed on read (no writes).
+  - Must not: write Delta tables or mutate persisted state.
+
+- **`flathold/analytics/**`**: pure Polars transforms (no IO, no Streamlit).
+
+- **`flathold/core/**`**: business concepts + invariants (no IO, no Streamlit).
+
+## Tables vs views naming
+
+- Persisted datasets: name modules `*_table.py` and functions `read_*_table()` / `write_*_table()`.
+- Derived datasets: name modules `*_view.py` and functions `read_*_view()` / `get_*_view()`.
+- Avoid naming a derived dataset as a “table”. Prefer `ledger_view` over `ledger_table`.
+
+## Ledger is derived
+
+- The ledger must be computed on read as a **simple join** of persisted sources:
+  - base ledger = `bank ∪ manual_ledger` (union) with stable `id`, and `ledger_source`
+  - attach tags by aggregating `transaction_tags` per `id` and **left-joining** to add `tags: List[str]`
+- Do not persist a ledger Delta table as a source of truth.

@@ -1,0 +1,13 @@
+---
+description: Flathold required formatting/lint/typecheck commands
+alwaysApply: true
+---
+
+# Quality gates
+
+Run these commands in this exact order after non-trivial changes:
+
+1. `uv run ruff format`
+2. `uv run ruff check --fix`
+3. `uv run pyright`
+4. `uv run pre-commit run --all-files`

@@ -1,110 +1,37 @@
-"""Dashboard — tagged allocation over time (loaded by `app.py` via `st.navigation`)."""
+"""Dashboard — tagged allocation over time (loaded by `ui/app.py` via `st.navigation`)."""
 
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import altair as alt
 import polars as pl
 import streamlit as st
 
-from flathold.bank_delta import read_existing_table
-from flathold.ledger_delta import (
-    read_ledger_table,
-    read_transaction_tags_table,
-    refresh_ledger_and_tags,
-)
-from flathold.tag_definitions_store import read_tag_rule_metadata_map
-from flathold.tag_group import TagGroup
-from flathold.uncategorised_sector import (
+from flathold.analytics.allocations.uncategorised_sector import (
     uncategorised_sector_daily_allocations,
 )
-from flathold.unknown_cash import (
+from flathold.analytics.allocations.unknown_cash import (
     unknown_cash_daily_allocations,
 )
-from flathold.untagged_spend import (
+from flathold.analytics.allocations.untagged_spend import (
     untagged_spend_daily_allocations,
 )
+from flathold.analytics.dashboard_metrics import (
+    TaggedUniqueMonthlyAvgInput,
+    avg_monthly_tagged_unique_debit,
+    clamp_range,
+    first_of_month,
+    inclusive_day_spine,
+    shift_months_first,
+    to_date,
+)
+from flathold.core.tag_group import TagGroup
+from flathold.data.tables.bank_table import read_existing_table
+from flathold.data.tables.tag_definitions_table import read_tag_rule_metadata_map
+from flathold.data.tables.transaction_tags_table import read_transaction_tags_table
+from flathold.data.views.ledger_view import read_ledger_view
+from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Dashboard", page_icon="🏦", layout="wide")
-
-
-def _to_date(d: object) -> date:
-    """Coerce Polars/Streamlit date-like values to ``datetime.date``."""
-    if isinstance(d, datetime):
-        return d.date()
-    if isinstance(d, date):
-        return d
-    msg = f"Expected date-like value, got {type(d).__name__}"
-    raise TypeError(msg)
-
-
-def _first_of_month(d: date) -> date:
-    return date(d.year, d.month, 1)
-
-
-def _shift_months_first(d: date, delta: int) -> date:
-    """First-of-month date ``d`` shifted by ``delta`` months."""
-    m = d.month - 1 + delta
-    y = d.year + m // 12
-    m = m % 12 + 1
-    return date(y, m, 1)
-
-
-def _clamp_range(lo: date, hi: date, bound_lo: date, bound_hi: date) -> tuple[date, date]:
-    """Clamp ``[lo, hi]`` to ``[bound_lo, bound_hi]``; if empty, return full bounds."""
-    lo2 = max(lo, bound_lo)
-    hi2 = min(hi, bound_hi)
-    if lo2 > hi2:
-        return bound_lo, bound_hi
-    return lo2, hi2
-
-
-def _inclusive_day_spine(range_start: date, range_end: date) -> pl.DataFrame:
-    """One row per calendar day from ``range_start`` through ``range_end`` (inclusive)."""
-    rs, re = (range_start, range_end) if range_start <= range_end else (range_end, range_start)
-    return pl.DataFrame({"period": pl.date_range(rs, re, interval="1d", eager=True)})
-
-
-@dataclass(frozen=True, slots=True)
-class _TaggedUniqueMonthlyAvgInput:
-    ledger: pl.DataFrame
-    tags_df: pl.DataFrame
-    selected_tags: tuple[str, ...]
-    period_cols: pl.DataFrame
-    lo: date
-    hi: date
-    monthly_in_range: pl.DataFrame
-
-
-def _avg_monthly_tagged_unique_debit(inp: _TaggedUniqueMonthlyAvgInput) -> float:
-    """Mean monthly debit for transactions with a selected tag; each transaction counted once."""
-    if not inp.selected_tags:
-        return 0.0
-    tags_sel = inp.tags_df.filter(pl.col("tag").is_in(list(inp.selected_tags)))
-    if tags_sel.is_empty():
-        return 0.0
-    ledger_debit = inp.ledger.select(["id", "Debit Amount"]).unique(subset=["id"], keep="first")
-    enriched = (
-        tags_sel.join(ledger_debit, on="id", how="inner")
-        .join(inp.period_cols, on="id", how="inner")
-        .with_columns(pl.date(pl.col("year"), pl.col("month"), 1).alias("period"))
-        .filter((pl.col("period") >= inp.lo) & (pl.col("period") <= inp.hi))
-    )
-    if enriched.is_empty():
-        return 0.0
-    unique_per = enriched.group_by(["id", "period"]).agg(
-        pl.col("Debit Amount").first().alias("debit")
-    )
-    monthly_sums = unique_per.group_by("period").agg(pl.col("debit").sum().alias("tagged"))
-    monthly_periods = inp.monthly_in_range.select("period").unique()
-    aligned = monthly_periods.join(monthly_sums, on="period", how="left").with_columns(
-        pl.col("tagged").fill_null(0.0),
-    )
-    if aligned.is_empty():
-        return 0.0
-    tagged = aligned.get_column("tagged")
-    n = len(tagged)
-    return float(tagged.sum()) / float(n) if n else 0.0
 
 
 def _request_dashboard_group(group_value: str) -> None:
@@ -289,7 +216,7 @@ st.caption(
     "Use the shortcuts or date picker for the metric and chart; then choose tags for the chart."
 )
 
-ledger = read_ledger_table()
+ledger = read_ledger_view()
 tags_df = read_transaction_tags_table()
 
 if ledger is None or len(ledger) == 0:
@@ -302,45 +229,45 @@ if ledger is None or len(ledger) == 0:
 ledger_periods = ledger.with_columns(
     pl.date(pl.col("year"), pl.col("month"), 1).alias("period"),
 )
-period_min = _to_date(ledger_periods.select(pl.col("period").min()).item())
-period_max = _to_date(ledger_periods.select(pl.col("period").max()).item())
+period_min = to_date(ledger_periods.select(pl.col("period").min()).item())
+period_max = to_date(ledger_periods.select(pl.col("period").max()).item())
 if "dashboard_date_range" not in st.session_state:
     st.session_state.dashboard_date_range = (period_min, period_max)
 
 today = date.today()
-first_this_month = _first_of_month(today)
-last_3_lo, last_3_hi = _clamp_range(
-    _shift_months_first(first_this_month, -2),
+first_this_month = first_of_month(today)
+last_3_lo, last_3_hi = clamp_range(
+    shift_months_first(first_this_month, -2),
     first_this_month,
     period_min,
     period_max,
 )
-last_6_lo, last_6_hi = _clamp_range(
-    _shift_months_first(first_this_month, -5),
+last_6_lo, last_6_hi = clamp_range(
+    shift_months_first(first_this_month, -5),
     first_this_month,
     period_min,
     period_max,
 )
 prev_year = today.year - 1
-last_year_lo, last_year_hi = _clamp_range(
+last_year_lo, last_year_hi = clamp_range(
     date(prev_year, 1, 1),
     date(prev_year, 12, 1),
     period_min,
     period_max,
 )
-ytd_lo, ytd_hi = _clamp_range(
+ytd_lo, ytd_hi = clamp_range(
     date(today.year, 1, 1),
     first_this_month,
     period_min,
     period_max,
 )
-this_month_lo, this_month_hi = _clamp_range(
+this_month_lo, this_month_hi = clamp_range(
     first_this_month,
     today,
     period_min,
     period_max,
 )
-last_30_lo, last_30_hi = _clamp_range(
+last_30_lo, last_30_hi = clamp_range(
     today - timedelta(days=29),
     today,
     period_min,
@@ -382,18 +309,18 @@ date_range_raw = st.date_input(
 )
 match date_range_raw:
     case (a, b):
-        range_start = _to_date(a)
-        range_end = _to_date(b)
+        range_start = to_date(a)
+        range_end = to_date(b)
     case (single,):
-        range_start = range_end = _to_date(single)
+        range_start = range_end = to_date(single)
     case _:
-        range_start = range_end = _to_date(date_range_raw)
+        range_start = range_end = to_date(date_range_raw)
 
 if range_start > range_end:
     range_start, range_end = range_end, range_start
 
-lo = _first_of_month(range_start)
-hi = _first_of_month(range_end)
+lo = first_of_month(range_start)
+hi = first_of_month(range_end)
 if lo > hi:
     lo, hi = hi, lo
 
@@ -496,7 +423,7 @@ if not selected:
     st.warning("Select at least one tag to see the chart.")
     st.stop()
 
-day_spine = _inclusive_day_spine(range_start, range_end)
+day_spine = inclusive_day_spine(range_start, range_end)
 if day_spine.is_empty():
     st.info("No days in the selected date range.")
     st.stop()
@@ -552,8 +479,8 @@ rule_selected = tuple(t for t in selected if tag_meta.get(t) is None or not tag_
 if rule_selected:
     # Match previous "Average tagged monthly expenditure" semantics:
     # count each transaction once per calendar month even if it has multiple selected tags.
-    avg_tagged = _avg_monthly_tagged_unique_debit(
-        _TaggedUniqueMonthlyAvgInput(
+    avg_tagged = avg_monthly_tagged_unique_debit(
+        TaggedUniqueMonthlyAvgInput(
             ledger=ledger,
             tags_df=tags_df,
             selected_tags=rule_selected,

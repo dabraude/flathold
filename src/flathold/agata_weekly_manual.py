@@ -8,8 +8,11 @@ from typing import cast
 
 import polars as pl
 
-from flathold.bank_delta import read_existing_table
-from flathold.manual_ledger import read_manual_ledger_table, write_manual_ledger_table
+from flathold.data.tables.bank_table import read_existing_table
+from flathold.data.tables.manual_ledger_table import (
+    read_manual_ledger_table,
+    write_manual_ledger_table,
+)
 
 AGATA_WEEKLY_MANUAL_DESCRIPTION = "Payment to Agata - weekly cleaning (manual)"
 
