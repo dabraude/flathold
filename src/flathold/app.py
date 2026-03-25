@@ -32,7 +32,21 @@ tags_page = st.Page(
     title="Tags",
     icon="🏷️",
 )
+household_contribution_page = st.Page(
+    _ROOT / "household_contribution.py",
+    title="Household contribution",
+    icon="💷",
+)
 
-pg = st.navigation([dashboard_page, upload_page, manual_page, ledger_page, tags_page])
+pg = st.navigation(
+    [
+        dashboard_page,
+        upload_page,
+        manual_page,
+        ledger_page,
+        tags_page,
+        household_contribution_page,
+    ]
+)
 st.set_page_config(page_title="Flathold", page_icon="🏦", layout="wide")
 pg.run()

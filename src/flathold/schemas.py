@@ -63,6 +63,16 @@ class TransactionTagsSchema(pa.DataFrameModel):
     counter_party: bool = pa.Field()
 
 
+class HouseholdSplitSettingsSchema(pa.DataFrameModel):
+    """Single-row Delta table for household contribution page (salaries, sundries, date range)."""
+
+    salary_dave_annual_gbp: float = pa.Field()
+    salary_claire_annual_gbp: float = pa.Field()
+    sundries_monthly_gbp: float = pa.Field()
+    projection_range_start: str = pa.Field()
+    projection_range_end: str = pa.Field()
+
+
 class TagDefinitionsSchema(pa.DataFrameModel):
     """One row per tag: display and grouping metadata (rules reference tags by name)."""
 
