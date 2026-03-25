@@ -106,24 +106,12 @@ def ensure_db_dir() -> None:
     BANK_TABLE.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _repair_missing_ids(df: pl.DataFrame) -> pl.DataFrame:
-    """Legacy bank rows without ``id``: compute and re-attach ``month`` partition."""
-    tmp = df
-    if "month" in tmp.columns:
-        tmp = tmp.drop("month")
-    with_id = compute_bank_transaction_ids(tmp)
-    return _add_month_partition(with_id)
-
-
 def read_existing_table() -> pl.DataFrame | None:
     if not BANK_TABLE.exists():
         return None
     try:
         df = pl.read_delta(str(BANK_TABLE))
-        df = _ensure_float_debit_credit(df)
-        if "id" not in df.columns:
-            df = _repair_missing_ids(df)
-        return df
+        return _ensure_float_debit_credit(df)
     except Exception:
         return None
 
@@ -141,8 +129,6 @@ def save_to_delta(df: pl.DataFrame) -> SaveResult:
     df = df.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
     df = compute_bank_transaction_ids(df)
     df = _add_month_partition(df)
-    if existing is not None:
-        existing = existing.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
     combined = pl.concat([existing, df]) if existing is not None else df
     combined = _ensure_float_debit_credit(combined)
     combined = combined.unique(subset=["id"], keep="first")
@@ -154,6 +140,7 @@ def save_to_delta(df: pl.DataFrame) -> SaveResult:
         str(BANK_TABLE),
         combined.to_arrow(),
         mode="overwrite",
+        schema_mode="overwrite",
         partition_by=["month"],
     )
     return SaveResult(total=total, new_rows=new_rows, duplicated=duplicated)
