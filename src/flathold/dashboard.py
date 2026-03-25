@@ -15,7 +15,6 @@ from flathold.ledger_delta import (
 )
 from flathold.tag_definitions_store import read_tag_rule_metadata_map
 from flathold.tag_group import TagGroup
-from flathold.tag_rules import tag_show_on_dashboard_default
 from flathold.uncategorised_sector import (
     UNCATEGORISED_SECTOR_TAG,
     average_monthly_uncategorised_sector,
@@ -451,12 +450,10 @@ agg_chart = agg.filter(
     (pl.col("period") >= pl.lit(range_start)) & (pl.col("period") <= pl.lit(range_end)),
 )
 all_tags_in_range = sorted(agg_chart["tag"].unique().to_list())
-default_tags = [t for t in all_tags_in_range if tag_show_on_dashboard_default(t)]
-if not default_tags:
-    default_tags = list(all_tags_in_range)
-
+sector_default_tags = [t for t in all_tags_in_range if TagGroup.SECTOR_CODES in tag_meta[t].groups]
 if "dashboard_tags" not in st.session_state:
-    st.session_state.dashboard_tags = list(default_tags)
+    # Match the "Sector-codes" group button behavior exactly.
+    st.session_state.dashboard_tags = list(sector_default_tags)
 
 # Apply group filter before the multiselect — cannot assign `dashboard_tags` after the widget
 # with that key is instantiated (StreamlitAPIException).
@@ -481,10 +478,11 @@ selected = st.multiselect(
     help=(
         "Daily allocation per tag; missing days are zero. Includes rule tags and calculated "
         "tags (e.g. unknown-cash, untagged-spend, uncategorised-sector). "
-        "Initial selection uses `show_on_dashboard_by_default` among tags with allocation in "
-        "the date range, or all such tags if none match. Use a group button below to show only "
-        "tags in that group (with allocation in range). Selection is kept when you change the "
-        "date range. If none remain, the chart stays empty until you pick tags or a group."
+        "Initial selection uses the `sector-codes` group among tags with allocation in the "
+        "date range (same as clicking the Sector-codes button below). Use a group button "
+        "below to show only tags in that group (with allocation in range). Selection is kept "
+        "when you change the date range. If none remain, the chart stays empty until you "
+        "pick tags or a group."
     ),
 )
 

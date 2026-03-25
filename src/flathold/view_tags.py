@@ -83,7 +83,6 @@ display = (
     )
     .select(
         pl.col("tag").alias("Tag"),
-        pl.col("show_on_dashboard_by_default").alias("Default on dashboard"),
         pl.col("counter_party").alias("Counterparty"),
         pl.col("calculated").alias("Calculated"),
         pl.col("Allocation groups"),
@@ -94,7 +93,6 @@ st.dataframe(
     display,
     column_config={
         "Tag": st.column_config.TextColumn("Tag", width="medium"),
-        "Default on dashboard": st.column_config.CheckboxColumn("Default on dashboard"),
         "Counterparty": st.column_config.CheckboxColumn("Counterparty"),
         "Calculated": st.column_config.CheckboxColumn("Calculated"),
         "Allocation groups": st.column_config.TextColumn("Allocation groups", width="large"),
