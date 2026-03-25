@@ -84,7 +84,11 @@ def _normalize(df: pl.DataFrame) -> pl.DataFrame:
     df = df.rename({c: c.strip() for c in df.columns})
     if "Sort Code" in df.columns:
         df = df.with_columns(pl.col("Sort Code").str.strip_chars("'").alias("Sort Code"))
+    if "Account Number" in df.columns:
+        df = df.with_columns(pl.col("Account Number").cast(pl.Utf8).alias("Account Number"))
     df = _ensure_float_debit_credit(df)
+    if "Balance" in df.columns:
+        df = df.with_columns(pl.col("Balance").cast(pl.Utf8).alias("Balance"))
     return _add_transaction_counter(df)
 
 
