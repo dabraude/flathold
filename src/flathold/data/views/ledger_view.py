@@ -2,42 +2,29 @@
 
 from __future__ import annotations
 
-import hashlib
-
 import polars as pl
 
 from flathold.data.schemas import LEDGER_COLUMN_NAMES
-from flathold.data.tables.bank_table import read_existing_table
+from flathold.data.tables.bank_table import compute_bank_transaction_ids, read_existing_table
 from flathold.data.tables.manual_ledger_table import read_manual_ledger_table
 from flathold.data.tables.tag_definitions_table import ensure_tag_definitions_table
 from flathold.data.tables.transaction_tags_table import read_transaction_tags_table
 
 
-def _row_sha256(rows: pl.Series) -> pl.Series:
-    return pl.Series([hashlib.sha256(s.encode("utf-8")).hexdigest() for s in rows])
-
-
 def build_ledger_from_bank_df(bank: pl.DataFrame) -> pl.DataFrame:
-    """Build ledger from bank table; year, month, day from Transaction Date; deterministic id."""
+    """Build ledger from bank table; year, month, day from Transaction Date; uses stored ``id``."""
     ordered = bank.sort(["Transaction Date", "Transaction Counter"])
     if "month" in ordered.columns:
         ordered = ordered.drop("month")
+    if "id" not in ordered.columns:
+        ordered = compute_bank_transaction_ids(ordered)
     date_parsed = pl.col("Transaction Date").str.to_date("%d/%m/%Y")
     ordered = ordered.with_columns(
         date_parsed.dt.year().alias("year"),
         date_parsed.dt.month().alias("month"),
         date_parsed.dt.day().alias("day"),
     )
-    sorted_cols = sorted(ordered.columns)
-    row_str = pl.concat_str(
-        [
-            pl.concat_str([pl.lit(f"{c}="), pl.col(c).cast(pl.Utf8).fill_null("")])
-            for c in sorted_cols
-        ],
-        separator="|",
-    )
-    ids = row_str.map_batches(_row_sha256)
-    return ordered.with_columns(ids.alias("id")).drop("Balance")
+    return ordered.drop("Balance")
 
 
 def _align_ledger_columns(df: pl.DataFrame) -> pl.DataFrame:

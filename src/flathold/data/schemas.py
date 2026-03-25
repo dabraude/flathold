@@ -8,6 +8,7 @@ from flathold.core.tag_pattern import KEBAB_TAG_PATTERN
 class BankSchema(pa.DataFrameModel):
     """Schema for the bank statement Delta table."""
 
+    id: str = pa.Field()
     transaction_counter: int = pa.Field(alias="Transaction Counter")
     transaction_date: str = pa.Field(alias="Transaction Date")
     transaction_type: str = pa.Field(alias="Transaction Type")

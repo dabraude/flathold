@@ -7,7 +7,7 @@ This app separates **source-of-truth persisted tables** from **derived views** t
 All persisted tables live under `db/` (Delta Lake directories). The code that reads/writes them must live in `src/flathold/data/tables/`.
 
 Expected tables:
-- **`bank`**: imported bank statement rows.
+- **`bank`**: imported bank statement rows (includes deterministic `id` per row, same value used when joining tags and building the ledger).
 - **`manual_ledger`**: manually entered ledger rows.
 - **`transaction_tags`**: one row per `(id, tag)` with `allocation` and `counter_party`.
 - **`tag_definitions`**: one row per tag with metadata (groups, calculated, etc.).
@@ -32,7 +32,7 @@ Derived views must live in `src/flathold/data/views/`. They are **not a source o
    - missing tags become `[]`
 
 #### `id` semantics
-- **Bank-derived ledger rows**: `id` must be deterministic from the bank row content so it is stable across runs.
+- **Bank-derived ledger rows**: `id` is stored on the **`bank` Delta table** and is deterministic from the bank row content (same formula as before, now persisted at ingest). The ledger view reads that `id` when building bank-derived rows.
 - **Manual ledger rows**: `id` is generated once and stored (e.g. prefixed `manual-...`); it must be stable across runs.
 
 ## Analytics layer (not persisted)

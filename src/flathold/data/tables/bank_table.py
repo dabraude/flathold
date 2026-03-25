@@ -1,5 +1,8 @@
 """Load bank statement CSV into a Delta table."""
 
+from __future__ import annotations
+
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +10,7 @@ import polars as pl
 from deltalake import write_deltalake
 
 from flathold.data.paths import BANK_TABLE
+from flathold.data.schemas import BankSchema
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,16 +20,37 @@ class SaveResult:
     duplicated: int
 
 
-_DEDUP_COLS = [
-    "Transaction Counter",
-    "Transaction Date",
-    "Transaction Type",
-    "Sort Code",
-    "Account Number",
-    "Transaction Description",
-    "Debit Amount",
-    "Credit Amount",
-]
+def _row_sha256(rows: pl.Series) -> pl.Series:
+    return pl.Series([hashlib.sha256(s.encode("utf-8")).hexdigest() for s in rows])
+
+
+def compute_bank_transaction_ids(df: pl.DataFrame) -> pl.DataFrame:
+    """Deterministic ``id`` per row (SHA-256 of canonical row string).
+
+    Matches the historical ledger formula: sort by date/counter, drop partition ``month``,
+    add calendar ``year``/``month``/``day`` for hashing, then drop those parts and keep ``id``.
+    """
+    ordered = df.sort(["Transaction Date", "Transaction Counter"])
+    if "month" in ordered.columns:
+        ordered = ordered.drop("month")
+    if "id" in ordered.columns:
+        ordered = ordered.drop("id")
+    date_parsed = pl.col("Transaction Date").str.to_date("%d/%m/%Y")
+    ordered = ordered.with_columns(
+        date_parsed.dt.year().alias("year"),
+        date_parsed.dt.month().alias("month"),
+        date_parsed.dt.day().alias("day"),
+    )
+    sorted_cols = sorted(ordered.columns)
+    row_str = pl.concat_str(
+        [
+            pl.concat_str([pl.lit(f"{c}="), pl.col(c).cast(pl.Utf8).fill_null("")])
+            for c in sorted_cols
+        ],
+        separator="|",
+    )
+    ids = row_str.map_batches(_row_sha256)
+    return ordered.with_columns(ids.alias("id")).drop("year", "month", "day")
 
 
 def _add_transaction_counter(df: pl.DataFrame) -> pl.DataFrame:
@@ -77,12 +102,24 @@ def ensure_db_dir() -> None:
     BANK_TABLE.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _repair_missing_ids(df: pl.DataFrame) -> pl.DataFrame:
+    """Legacy bank rows without ``id``: compute and re-attach ``month`` partition."""
+    tmp = df
+    if "month" in tmp.columns:
+        tmp = tmp.drop("month")
+    with_id = compute_bank_transaction_ids(tmp)
+    return _add_month_partition(with_id)
+
+
 def read_existing_table() -> pl.DataFrame | None:
     if not BANK_TABLE.exists():
         return None
     try:
         df = pl.read_delta(str(BANK_TABLE))
-        return _ensure_float_debit_credit(df)
+        df = _ensure_float_debit_credit(df)
+        if "id" not in df.columns:
+            df = _repair_missing_ids(df)
+        return df
     except Exception:
         return None
 
@@ -98,12 +135,14 @@ def save_to_delta(df: pl.DataFrame) -> SaveResult:
     existing = read_existing_table()
     existing_count = len(existing) if existing is not None else 0
     df = df.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
+    df = compute_bank_transaction_ids(df)
     df = _add_month_partition(df)
     if existing is not None:
         existing = existing.with_columns(pl.col("Transaction Counter").cast(pl.Int64))
     combined = pl.concat([existing, df]) if existing is not None else df
     combined = _ensure_float_debit_credit(combined)
-    combined = combined.unique(subset=_DEDUP_COLS, keep="first")
+    combined = combined.unique(subset=["id"], keep="first")
+    BankSchema.validate(combined)
     total = len(combined)
     new_rows = total - existing_count
     duplicated = len(df) - new_rows
