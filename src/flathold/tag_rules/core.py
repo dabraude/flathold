@@ -20,7 +20,7 @@ class TagRule:
     Allocation is ``amount_absolute + amount_proportion * line_amount`` where ``line_amount`` is
     ``Debit Amount + Credit Amount`` on the matched ledger row.
 
-    Display and grouping (dashboard defaults, counterparty, allocation groups) live in the
+    Display and grouping (dashboard defaults, counterparty, tag groups) live in the
     ``tag_definitions`` Delta table, not on ``TagRule``.
     """
 

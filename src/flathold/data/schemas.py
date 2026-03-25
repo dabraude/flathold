@@ -77,7 +77,6 @@ class TagDefinitionsSchema(pa.DataFrameModel):
     """One row per tag: display and grouping metadata."""
 
     tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
-    show_on_dashboard_by_default: bool = pa.Field()
     counter_party: bool = pa.Field()
     calculated: bool = pa.Field()
     groups: str = pa.Field()

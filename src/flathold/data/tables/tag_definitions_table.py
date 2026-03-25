@@ -14,16 +14,21 @@ from flathold.core.tag_pattern import validate_kebab_tag
 from flathold.core.tag_rule_metadata import TagRuleMetadata
 from flathold.data.paths import TAG_DEFINITIONS_TABLE
 from flathold.data.schemas import TagDefinitionsSchema
-from flathold.data.tag_definitions_seed import CALCULATED_TAG_NAMES, TAG_DEFINITIONS_SEED_ROWS
+from flathold.data.tag_definitions_seed import (
+    CALCULATED_TAG_NAMES,
+    TAG_DEFINITIONS_SEED_ROWS,
+    seed_groups_for_tag,
+)
 
 if TYPE_CHECKING:
     from flathold.tag_rules.core import TagRule
 
 _GROUPS_SEP = "|"
+# Removed from the model; strip if still present in older Delta rows.
+_LEGACY_DASHBOARD_GROUP = "dashboard-default"
 
 _TAG_DEFINITIONS_COLUMNS: tuple[str, ...] = (
     "tag",
-    "show_on_dashboard_by_default",
     "counter_party",
     "calculated",
     "groups",
@@ -45,12 +50,11 @@ def _seed_dataframe() -> pl.DataFrame:
     rows = [
         {
             "tag": tag,
-            "show_on_dashboard_by_default": show,
             "counter_party": cp,
             "calculated": tag in CALCULATED_TAG_NAMES,
             "groups": _groups_to_storage(groups),
         }
-        for tag, show, cp, groups in TAG_DEFINITIONS_SEED_ROWS
+        for tag, cp, groups in TAG_DEFINITIONS_SEED_ROWS
     ]
     return pl.DataFrame(rows).select(_TAG_DEFINITIONS_COLUMNS)
 
@@ -59,7 +63,27 @@ def _normalize_tag_definitions_columns(df: pl.DataFrame) -> pl.DataFrame:
     out = df
     if "calculated" not in out.columns:
         out = out.with_columns(pl.lit(False).alias("calculated"))
-    return out.select(_TAG_DEFINITIONS_COLUMNS)
+    has_legacy_show = "show_on_dashboard_by_default" in out.columns
+    sector = TagGroup.SECTOR_CODES.value
+    built: list[dict[str, object]] = []
+    for row in out.iter_rows(named=True):
+        tag = str(row["tag"])
+        parts = set(_groups_from_storage(str(row.get("groups", ""))))
+        parts.discard(_LEGACY_DASHBOARD_GROUP)
+        if has_legacy_show:
+            if bool(row["show_on_dashboard_by_default"]):
+                parts.add(sector)
+        elif sector in seed_groups_for_tag(tag):
+            parts.add(sector)
+        built.append(
+            {
+                "tag": tag,
+                "counter_party": bool(row["counter_party"]),
+                "calculated": bool(row["calculated"]),
+                "groups": _groups_to_storage(tuple(parts)),
+            }
+        )
+    return pl.DataFrame(built).select(_TAG_DEFINITIONS_COLUMNS)
 
 
 def _normalize_metadata(
@@ -116,6 +140,15 @@ def reset_tag_definitions_to_seed() -> None:
     _write_tag_definitions_table(_seed_dataframe())
 
 
+def _groups_column_differs_after_normalize(raw: pl.DataFrame, normalized: pl.DataFrame) -> bool:
+    """Whether ``groups`` strings changed (e.g. legacy strip or seed merge for ``sector-codes``)."""
+    r = raw.select(["tag", "groups"]).sort("tag")
+    n = normalized.select(["tag", "groups"]).sort("tag")
+    if len(r) != len(n):
+        return True
+    return r.get_column("groups").to_list() != n.get_column("groups").to_list()
+
+
 def ensure_tag_definitions_table() -> None:
     seed = _seed_dataframe()
     raw = _read_tag_definitions_raw()
@@ -123,11 +156,17 @@ def ensure_tag_definitions_table() -> None:
         _write_tag_definitions_table(seed)
         return
     had_calculated = "calculated" in raw.columns
+    had_legacy_show = "show_on_dashboard_by_default" in raw.columns
     existing = _normalize_tag_definitions_columns(raw)
     have = set(existing["tag"].to_list())
     missing = seed.filter(~pl.col("tag").is_in(list(have)))
     if len(missing) == 0:
-        if not had_calculated:
+        should_persist = (
+            not had_calculated
+            or had_legacy_show
+            or _groups_column_differs_after_normalize(raw, existing)
+        )
+        if should_persist:
             _write_tag_definitions_table(existing)
         return
     merged = pl.concat([existing, missing], how="vertical")
@@ -187,14 +226,6 @@ def metadata_map_covers_rules(
 def tag_groups(tag: str) -> tuple[TagGroup, ...]:
     m = tag_metadata_for_tag(tag)
     return () if m is None else m.groups
-
-
-def tag_show_on_dashboard_default(tag: str) -> bool:
-    df = read_tag_definitions_table()
-    hit = df.filter(pl.col("tag") == tag)
-    if len(hit) == 0:
-        return False
-    return bool(hit["show_on_dashboard_by_default"][0])
 
 
 def tag_counter_party(tag: str) -> bool:

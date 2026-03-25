@@ -59,7 +59,8 @@ df = read_definitions_dataframe()
 rule_tags = rule_tag_names()
 def_tags = set(df["tag"].to_list())
 only_in_rules = rule_tags - def_tags
-only_in_def = def_tags - rule_tags
+calculated_def_tags = set(df.filter(pl.col("calculated"))["tag"].to_list())
+only_in_def = def_tags - rule_tags - calculated_def_tags
 
 if only_in_rules:
     st.error(

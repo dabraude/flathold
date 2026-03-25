@@ -66,6 +66,11 @@ def write_manual_ledger_table(df: pl.DataFrame) -> None:
     )
 
 
+def clear_manual_ledger_table() -> None:
+    """Remove all manual ledger rows (deletes ``db/manual_ledger`` when empty)."""
+    write_manual_ledger_table(pl.DataFrame())
+
+
 def _next_manual_transaction_counter(existing: pl.DataFrame | None, transaction_date: str) -> int:
     if existing is None or len(existing) == 0:
         return 1

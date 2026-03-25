@@ -74,6 +74,21 @@ def _add_month_partition(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def _assert_all_rows_have_assigned_ids(df: pl.DataFrame) -> None:
+    """Every row must have a non-null, non-empty ``id`` before write."""
+    if "id" not in df.columns:
+        msg = "Migration aborted: expected an 'id' column after processing"
+        raise ValueError(msg)
+    ids = pl.col("id").cast(pl.Utf8, strict=False)
+    missing = df.filter(ids.is_null() | (ids.str.strip_chars() == ""))
+    if missing.height > 0:
+        msg = (
+            f"Migration aborted: {missing.height} row(s) have a null or empty id "
+            "(not all ids assigned)"
+        )
+        raise ValueError(msg)
+
+
 def _canonicalize_bank_for_schema(df: pl.DataFrame) -> pl.DataFrame:
     """Cast columns to match :class:`BankSchema` (migration only)."""
     out = df
@@ -126,6 +141,7 @@ def migrate_bank_table() -> None:
         df = compute_bank_transaction_ids(df)
     if "month" not in df.columns:
         df = _add_month_partition(df)
+    _assert_all_rows_have_assigned_ids(df)
     df = df.unique(subset=["id"], keep="first")
     BankSchema.validate(df)
     try:

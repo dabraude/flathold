@@ -9,11 +9,35 @@ from flathold.agata_weekly_manual import (
 from flathold.services.manual_ledger_service import (
     ManualLedgerAppendInput,
     append_manual_row,
+    clear_manual_ledger,
     read_manual_ledger,
 )
 from flathold.services.tagging_service import refresh_ledger_and_tags
 
 st.set_page_config(page_title="Manual entries", page_icon="✏️", layout="wide")
+
+
+@st.dialog("Clear manual ledger")
+def _clear_manual_dialog() -> None:
+    st.warning(
+        "This **deletes** every row in `db/manual_ledger`. After clearing, tags are re-synced "
+        "with bank + manual data (same as **Update** in the sidebar)."
+    )
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Confirm — clear all", type="primary", width="stretch", key="manual_clear_ok"):
+            clear_manual_ledger()
+            with st.spinner("Re-syncing tags…"):
+                r = refresh_ledger_and_tags()
+            if r.success:
+                st.session_state["_manual_cleared"] = True
+            else:
+                st.session_state["_manual_cleared_error"] = r.message
+            st.rerun()
+    with c2:
+        if st.button("Cancel", width="stretch", key="manual_clear_cancel"):
+            st.rerun()
+
 
 with st.sidebar:
     if st.button(
@@ -33,6 +57,10 @@ with st.sidebar:
             st.error(result.message)
 
 st.title("✏️ Manual entries")
+if st.session_state.pop("_manual_cleared", False):
+    st.success("Manual ledger cleared and tags updated.")
+if (err := st.session_state.pop("_manual_cleared_error", None)) is not None:
+    st.error(f"Manual ledger cleared, but tag update failed: {err}")
 st.caption(
     "Not from uploaded CSVs. Ids are `manual-…`; on **View ledger** they show as **ledger_source** "
     "`manual`. Tag rules include them."
@@ -96,7 +124,17 @@ manual = read_manual_ledger()
 if manual is None or len(manual) == 0:
     st.info("No manual entries yet. Use the form above to add one.")
 else:
-    st.subheader("Stored manual rows")
+    h1, h2 = st.columns([4, 1], vertical_alignment="center")
+    with h1:
+        st.subheader("Stored manual rows")
+    with h2:
+        if st.button(
+            "Clear all",
+            help="Delete every manual row and re-sync tags.",
+            key="manual_open_clear_dialog",
+            width="stretch",
+        ):
+            _clear_manual_dialog()
     show = manual.sort(["Transaction Date", "Transaction Counter"])
     st.dataframe(show, width="stretch", hide_index=True)
 

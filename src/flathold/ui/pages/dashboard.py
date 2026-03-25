@@ -369,8 +369,9 @@ selected = st.multiselect(
         "Daily allocation per tag; missing days are zero. Includes rule tags and calculated "
         "tags (e.g. unknown-cash, untagged-spend, uncategorised-sector). "
         "Initial selection uses the `sector-codes` group among tags with allocation in the "
-        "date range (same as clicking the Sector-codes button below). Use a group button "
-        "below to show only tags in that group (with allocation in range). Selection is kept "
+        "date range (same as clicking the Sector-codes button below). Group buttons filter by "
+        "`sector-codes`, `counter-party`, or `cash-transactions` (tags: unknown-cash, "
+        "cash-spend). Selection is kept "
         "when you change the date range. If none remain, the chart stays empty until you "
         "pick tags or a group."
     ),
