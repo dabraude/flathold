@@ -77,7 +77,6 @@ class TagDefinitionsSchema(pa.DataFrameModel):
     """One row per tag: display and grouping metadata (rules reference tags by name)."""
 
     tag: str = pa.Field(str_matches=KEBAB_TAG_PATTERN)
-    show_on_dashboard_by_default: bool = pa.Field()
     counter_party: bool = pa.Field()
     # True when the tag is derived by logic (e.g. rollups); rule-applied tags are False.
     calculated: bool = pa.Field()

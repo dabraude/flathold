@@ -24,7 +24,6 @@ _GROUPS_SEP = "|"
 # Persisted order for Delta and ``pl.concat`` (must match ``TagDefinitionsSchema`` field order).
 _TAG_DEFINITIONS_COLUMNS: tuple[str, ...] = (
     "tag",
-    "show_on_dashboard_by_default",
     "counter_party",
     "calculated",
     "groups",
@@ -46,12 +45,11 @@ def _seed_dataframe() -> pl.DataFrame:
     rows = [
         {
             "tag": tag,
-            "show_on_dashboard_by_default": show,
             "counter_party": cp,
             "calculated": tag in CALCULATED_TAG_NAMES,
             "groups": _groups_to_storage(groups),
         }
-        for tag, show, cp, groups in TAG_DEFINITIONS_SEED_ROWS
+        for tag, cp, groups in TAG_DEFINITIONS_SEED_ROWS
     ]
     return pl.DataFrame(rows).select(_TAG_DEFINITIONS_COLUMNS)
 
@@ -81,7 +79,6 @@ def row_to_tag_rule_metadata(row: dict[str, object]) -> TagRuleMetadata:
     cp = bool(row["counter_party"])
     groups_tuple = _normalize_metadata(counter_party=cp, groups=groups_tuple)
     return TagRuleMetadata(
-        show_on_dashboard_by_default=bool(row["show_on_dashboard_by_default"]),
         counter_party=cp,
         calculated=bool(row["calculated"]),
         groups=groups_tuple,
@@ -127,12 +124,13 @@ def ensure_tag_definitions_table() -> None:
     if raw is None or len(raw) == 0:
         _write_tag_definitions_table(seed)
         return
+    had_old_show_column = "show_on_dashboard_by_default" in raw.columns
     had_calculated = "calculated" in raw.columns
     existing = _normalize_tag_definitions_columns(raw)
     have = set(existing["tag"].to_list())
     missing = seed.filter(~pl.col("tag").is_in(list(have)))
     if len(missing) == 0:
-        if not had_calculated:
+        if not had_calculated or had_old_show_column:
             _write_tag_definitions_table(existing)
         return
     merged = pl.concat([existing, missing], how="vertical")
@@ -146,10 +144,11 @@ def read_tag_definitions_table() -> pl.DataFrame:
     if raw is None or len(raw) == 0:
         msg = "tag_definitions table missing after ensure"
         raise RuntimeError(msg)
-    TagDefinitionsSchema.validate(raw)
-    for t in raw["tag"].to_list():
+    normalized = _normalize_tag_definitions_columns(raw)
+    TagDefinitionsSchema.validate(normalized)
+    for t in normalized["tag"].to_list():
         validate_kebab_tag(str(t))
-    return raw
+    return normalized
 
 
 def read_tag_rule_metadata_map() -> dict[str, TagRuleMetadata]:
@@ -197,12 +196,6 @@ def tag_groups(tag: str) -> tuple[TagGroup, ...]:
     """Return group labels for ``tag`` from persisted definitions."""
     m = tag_metadata_for_tag(tag)
     return () if m is None else m.groups
-
-
-def tag_show_on_dashboard_default(tag: str) -> bool:
-    """Whether ``tag`` is selected by default on the dashboard."""
-    m = tag_metadata_for_tag(tag)
-    return False if m is None else m.show_on_dashboard_by_default
 
 
 def tag_counter_party(tag: str) -> bool:

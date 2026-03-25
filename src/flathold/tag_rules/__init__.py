@@ -7,7 +7,6 @@ from flathold.tag_definitions_store import (
     read_tag_rule_metadata_map,
     tag_counter_party,
     tag_groups,
-    tag_show_on_dashboard_default,
 )
 from flathold.tag_pattern import KEBAB_TAG_PATTERN
 from flathold.tag_rule_metadata import TagRuleMetadata
@@ -41,7 +40,6 @@ __all__ = [
     "apply_tag_rules",
     "tag_counter_party",
     "tag_groups",
-    "tag_show_on_dashboard_default",
     "validate_at_most_one_counter_party_tag_per_transaction",
     "validate_kebab_tag",
     "validate_tag_group_allocations",

@@ -16,18 +16,12 @@ from flathold.ledger_delta import (
 from flathold.tag_definitions_store import read_tag_rule_metadata_map
 from flathold.tag_group import TagGroup
 from flathold.uncategorised_sector import (
-    UNCATEGORISED_SECTOR_TAG,
-    average_monthly_uncategorised_sector,
     uncategorised_sector_daily_allocations,
 )
 from flathold.unknown_cash import (
-    UNKNOWN_CASH_TAG,
-    average_monthly_unknown_cash,
     unknown_cash_daily_allocations,
 )
 from flathold.untagged_spend import (
-    UNTAGGED_SPEND_TAG,
-    average_monthly_untagged_spend,
     untagged_spend_daily_allocations,
 )
 
@@ -552,95 +546,45 @@ bar_df = pl.DataFrame(
     }
 )
 
-rule_selected = tuple(t for t in selected if tag_meta.get(t) is None or not tag_meta[t].calculated)
-avg_tagged = _avg_monthly_tagged_unique_debit(
-    _TaggedUniqueMonthlyAvgInput(
-        ledger=ledger,
-        tags_df=tags_df,
-        selected_tags=rule_selected,
-        period_cols=period_cols,
-        lo=lo,
-        hi=hi,
-        monthly_in_range=monthly_in_range,
-    ),
-)
 n_months_metric = monthly_in_range.height
-metric_cols = st.columns(4)
+
+rule_selected = tuple(t for t in selected if tag_meta.get(t) is None or not tag_meta[t].calculated)
+if rule_selected:
+    # Match previous "Average tagged monthly expenditure" semantics:
+    # count each transaction once per calendar month even if it has multiple selected tags.
+    avg_tagged = _avg_monthly_tagged_unique_debit(
+        _TaggedUniqueMonthlyAvgInput(
+            ledger=ledger,
+            tags_df=tags_df,
+            selected_tags=rule_selected,
+            period_cols=period_cols,
+            lo=lo,
+            hi=hi,
+            monthly_in_range=monthly_in_range,
+        ),
+    )
+    avg_spend = avg_tagged
+    total_spend = avg_tagged * float(n_months_metric)
+else:
+    avg_spend = None
+    total_spend = None
+
+metric_cols = st.columns(2)
 with metric_cols[0]:
-    if rule_selected:
-        st.metric(
-            "Average tagged monthly expenditure",
-            f"£{avg_tagged:,.2f}",
-            help=(
-                "Mean per calendar month of debit from transactions that carry at least one "
-                "selected rule tag; each transaction is counted once per month (same months as "
-                f"total average above). {n_months_metric} month(s) in range. "
-                "Calculated tags are excluded."
-            ),
-        )
-    else:
-        st.metric(
-            "Average tagged monthly expenditure",
-            "—",
-            help="No rule tags selected; pick tags other than calculated-only to compute this.",
-        )
+    st.metric(
+        "Total spend (selected tags)",
+        "—" if total_spend is None else f"£{total_spend:,.2f}",
+        help="Total of unique tagged transaction debit (each txn counted once per month).",
+    )
 with metric_cols[1]:
-    if UNKNOWN_CASH_TAG in selected:
-        avg_unknown = average_monthly_unknown_cash(tags_df, period_cols, lo, hi)
-        st.metric(
-            "Average monthly unknown cash",
-            f"£{avg_unknown:,.2f}",
-            help=(
-                "Mean per calendar month of (cash-spend allocations minus cash-withdrawal "
-                f"allocations). {n_months_metric} month(s) in range."
-            ),
-        )
-    else:
-        st.metric(
-            "Average monthly unknown cash",
-            "—",
-            help="Select **unknown-cash** to see spend minus withdrawal by month (spread per day).",
-        )
-with metric_cols[2]:
-    if UNTAGGED_SPEND_TAG in selected:
-        avg_untagged = average_monthly_untagged_spend(ledger, tags_df, lo, hi)
-        st.metric(
-            "Average monthly untagged spend",
-            f"£{avg_untagged:,.2f}",
-            help=(
-                "Mean per calendar month of |line| minus sum of |tag allocations| per "
-                f"transaction (then summed). {n_months_metric} month(s) in range."
-            ),
-        )
-    else:
-        st.metric(
-            "Average monthly untagged spend",
-            "—",
-            help=(
-                "Select **untagged-spend** for debit not covered by tag allocations "
-                "(spread per day)."
-            ),
-        )
-with metric_cols[3]:
-    if UNCATEGORISED_SECTOR_TAG in selected:
-        avg_uncat = average_monthly_uncategorised_sector(ledger, tags_df, tag_meta, lo, hi)
-        st.metric(
-            "Average monthly uncategorised sector",
-            f"£{avg_uncat:,.2f}",
-            help=(
-                "Mean per calendar month of |line| minus sum of |allocations| on tags in the "
-                f"sector-codes group only (then summed). {n_months_metric} month(s) in range."
-            ),
-        )
-    else:
-        st.metric(
-            "Average monthly uncategorised sector",
-            "—",
-            help=(
-                "Select **uncategorised-sector** for debit not covered by sector-code tag "
-                "allocations (spread per day)."
-            ),
-        )
+    st.metric(
+        "Average spend per calendar month",
+        "—" if avg_spend is None else f"£{avg_spend:,.2f}",
+        help=(
+            "Total spend divided by the number of calendar months in the selected date range. "
+            f"{n_months_metric} month(s) in range."
+        ),
+    )
 
 bar_col, line_col = st.columns([3, 5], vertical_alignment="center")
 with bar_col:

@@ -9,7 +9,6 @@ from flathold.tag_group import TagGroup
 class TagRuleMetadata:
     """Metadata for a kebab-case transaction tag."""
 
-    show_on_dashboard_by_default: bool
     counter_party: bool
     calculated: bool
     groups: tuple[TagGroup, ...]
