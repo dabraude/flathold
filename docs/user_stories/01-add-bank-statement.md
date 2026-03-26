@@ -39,5 +39,6 @@ The bank Delta table lives at **`db/bank`** (project-relative). Rows are **parti
 
 ## Out of scope for this story
 
-- Tag rules, `transaction_tags`, and the sidebar “Update” / refresh flow (separate use case).
+- Tag rules and `transaction_tags` semantics (separate use case).
 - Manual ledger entries (different table and flow).
+- Note: the page currently exposes a sidebar **Update** button that runs `refresh_ledger_and_tags`; that orchestration is not part of this upload acceptance flow.

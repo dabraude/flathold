@@ -12,15 +12,15 @@ Data flows through **three** ledger concepts in order. Each step runs **when** s
 |------|--------|---------------------|--------------|
 | 1 | **Base** | Whenever code calls `read_ledger_view()` (or `get_ledger_view()`). | **Read** bank and manual Delta tables, **union** rows (`ledger_source` = `bank` \| `manual`), **left-join** aggregated **stored** tags from `transaction_tags` into `tags: List[str]` per `id`. **Calculated tags are not** in this frame. |
 | 2 | **Enhanced** | When analytics needs rule + calculated behaviour (e.g. dashboard allocations, future ledger enrichment). | Start from base ledger **plus** long-form `transaction_tags` (allocations) **plus** tag metadata from `tag_definitions`. **Derive calculated tags** and combined allocation series in memory (e.g. `daily_tag_allocations_long` in `analytics/enhanced_ledger.py`). **No** Delta write; validation still forbids persisting calculated tags on `transaction_tags`. |
-| 3 | **Viewable** | When the UI (or a presenter) prepares a frame for display. | Apply **clarity-only** transforms: split `tags` into **Counter Party** vs **Tags** using tag groups, reorder columns, styling — **no** new source of truth. Input should eventually be **enhanced** where per-row or derived fields matter; until then, input is **base**. |
+| 3 | **Viewable** | When the UI (or a presenter) prepares a frame for display. | Apply **clarity-only** transforms: split `tags` into **Counter Party** vs **Tags** using tag groups, reorder columns, styling — **no** new source of truth. Current page input is the **enhanced** ledger (or a projection of it). |
 
-**Mental model:** **base** = persisted facts + stored tags; **enhanced** = base + analytic derivations (calculated tags, allocation logic); **viewable** = enhanced (target) + human-friendly layout.
+**Mental model:** **base** = persisted facts + stored tags; **enhanced** = base + analytic derivations (calculated tags, allocation logic); **viewable** = enhanced + human-friendly layout.
 
 ## Acceptance criteria
 
 1. **Chain is documented and respected in code layout**: base in `data/views/`, enhanced in `analytics/`, viewable transforms in `ui/presenters/` (see `docs/data-model.md`).
 2. **View ledger page** applies **only** viewable-layer presentation (presenter) on top of whatever ledger frame it receives; it does not reimplement analytics or write Delta tables.
-3. **Target behaviour**: the frame passed into the viewable presenter is ultimately the **enhanced** ledger (or a projection of it), so calculated-tag context can appear on the screen **without** persisting those tags on `transaction_tags`.
+3. The frame passed into the viewable presenter is the **enhanced** ledger (or a projection of it), so calculated-tag context appears on screen **without** persisting those tags on `transaction_tags`.
 4. The page passes the **enhanced** ledger into the presenter; **split counter party / tags** applies to stored `tags` only, and **Calculated tags** is a separate column.
 
 ## Current implementation
