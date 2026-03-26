@@ -1,9 +1,9 @@
-"""View ledger: bank rows plus stable id and tags (derived from bank storage)."""
+"""View ledger: enhanced ledger (base + calculated-tag hints) through the viewable presenter."""
 
 import polars as pl
 import streamlit as st
 
-from flathold.services.ledger_service import get_ledger_view
+from flathold.services.ledger_service import get_enhanced_ledger
 from flathold.services.tag_definitions_service import get_tag_rule_metadata_map
 from flathold.services.tagging_service import refresh_ledger_and_tags
 from flathold.ui.presenters.ledger_presenter import (
@@ -54,7 +54,7 @@ def _month_label(month_num: int) -> str:
 
 st.title("📋 View ledger")
 tag_meta = get_tag_rule_metadata_map()
-existing = get_ledger_view()
+existing = get_enhanced_ledger()
 
 if existing is None or len(existing) == 0:
     st.info(

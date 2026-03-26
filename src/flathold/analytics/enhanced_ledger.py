@@ -9,10 +9,17 @@ from datetime import date
 import polars as pl
 
 from flathold.analytics.allocations.uncategorised_sector import (
+    UNCATEGORISED_SECTOR_TAG,
+    per_transaction_uncategorised_sector_remainder,
     uncategorised_sector_daily_allocations,
 )
 from flathold.analytics.allocations.unknown_cash import unknown_cash_daily_allocations
-from flathold.analytics.allocations.untagged_spend import untagged_spend_daily_allocations
+from flathold.analytics.allocations.untagged_spend import (
+    UNTAGGED_SPEND_TAG,
+    per_transaction_untagged_remainder,
+    untagged_spend_daily_allocations,
+)
+from flathold.core.ledger_columns import CALCULATED_TAGS_COLUMN
 from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 
@@ -23,6 +30,58 @@ class DailyTagAllocationsInput:
     tag_meta: Mapping[str, TagRuleMetadata]
     range_start: date
     range_end: date
+
+
+def build_enhanced_ledger(
+    ledger: pl.DataFrame,
+    tags_df: pl.DataFrame | None,
+    tag_meta: Mapping[str, TagRuleMetadata],
+) -> pl.DataFrame:
+    """Base ledger plus ``calculated_tags`` per row (hints tied to per-transaction remainders).
+
+    Month/day-only series (e.g. ``unknown-cash``) are omitted at row level.
+    """
+
+    if ledger.is_empty():
+        return ledger
+    tags = (
+        tags_df
+        if tags_df is not None and len(tags_df) > 0
+        else pl.DataFrame(
+            schema={
+                "id": pl.Utf8,
+                "tag": pl.Utf8,
+                "allocation": pl.Float64,
+                "counter_party": pl.Boolean,
+            }
+        )
+    )
+    if "allocation" not in tags.columns:
+        tags = tags.with_columns(pl.lit(0.0).alias("allocation"))
+    u = per_transaction_untagged_remainder(ledger, tags).select(["id", "untagged"])
+    c = per_transaction_uncategorised_sector_remainder(ledger, tags, tag_meta).select(
+        ["id", "uncategorised"]
+    )
+    out = (
+        ledger.join(u, on="id", how="left")
+        .join(c, on="id", how="left")
+        .with_columns(
+            pl.col("untagged").fill_null(0.0),
+            pl.col("uncategorised").fill_null(0.0),
+        )
+        .with_columns(
+            pl.concat_list(
+                [
+                    pl.when(pl.col("untagged") > 0).then(pl.lit(UNTAGGED_SPEND_TAG)),
+                    pl.when(pl.col("uncategorised") > 0).then(pl.lit(UNCATEGORISED_SECTOR_TAG)),
+                ]
+            )
+            .list.drop_nulls()
+            .alias(CALCULATED_TAGS_COLUMN)
+        )
+        .drop(["untagged", "uncategorised"])
+    )
+    return out
 
 
 def daily_tag_allocations_long(

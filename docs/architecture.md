@@ -38,7 +38,9 @@ Under `src/flathold/`:
 
 ## Analytics pipeline
 
-End state: **base ledger** (`data/views/ledger_view`) → **enhanced ledger** (in `analytics/`) → **analytic views** (functions in `analytics/`) → **UI** (filter / sum / mean / chart wiring only).
+End state: **base ledger** (`data/views/ledger_view`) → **enhanced ledger** (in `analytics/`) → **analytic views** (in `analytics/`) → **UI** (filter / sum / mean / chart wiring only).
+
+For **ledger screens**, the flow is **base → enhanced → viewable ledger**: `get_enhanced_ledger()` reads the base ledger and returns `build_enhanced_ledger(...)` (including `calculated_tags`), then `ledger_to_ledger_view` in `ui/presenters/` applies presentation-only transforms (counter party column, **Calculated tags** column, styling).
 
 ```mermaid
 flowchart LR
@@ -58,12 +60,16 @@ flowchart LR
     Enhanced --> Views
   end
   subgraph ui_layer [UI]
+    Viewable[viewable presenter]
     Pages[pages trivial ops only]
     Views --> Pages
+    BaseLedger -.-> Viewable
+    Enhanced -.-> Viewable
+    Viewable --> Pages
   end
 ```
 
-See `docs/data-model.md` for base vs enhanced ledger.
+See `docs/data-model.md` for the three ledgers (base, enhanced, viewable).
 
 ## Dependency rules (what may import what)
 

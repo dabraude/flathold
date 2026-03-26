@@ -35,24 +35,30 @@ Derived views must live in `src/flathold/data/views/`. They are **not a source o
 - **Bank-derived ledger rows**: `id` is stored on the **`bank` Delta table** and is deterministic from the bank row content (same formula as before, now persisted at ingest). The ledger view reads that `id` when building bank-derived rows.
 - **Manual ledger rows**: `id` is generated once and stored (e.g. prefixed `manual-...`); it must be stable across runs.
 
-## Analytics layer (not persisted)
+## Three ledgers (base, enhanced, viewable)
 
-The **base ledger** above is the only “ledger” under `data/views/`: a join of persisted tables plus stored tags as `tags: List[str]`. It does **not** include **calculated** tags.
+These names describe **how far derived** the data is: persisted facts plus stored tags → analytics (including calculated tags) → UI-ready layout. Only the **base** ledger is the single wide “ledger table” in `data/views/`; the others are in-memory or screen-oriented.
 
-**Enhanced ledger** (built in `src/flathold/analytics/`, not under `data/views/`): an in-memory model that combines:
+### 1. Base ledger
 
-- the base ledger (from `read_ledger_view()`),
-- **allocation-level** `transaction_tags` (long form: `id`, `tag`, `allocation`, …),
-- **tag metadata** from `tag_definitions` (e.g. `calculated`, groups).
+- **Definition**: One row per bank or manual transaction: banking columns, stable `id`, `ledger_source` (`"bank"` | `"manual"`), calendar parts, and `tags: List[str]` from **stored** `transaction_tags` only (aggregated per `id`, left-joined; missing → `[]`).
+- **Excludes**: Calculated tags. Those must not appear in persisted `transaction_tags` (see `tag_rules` validation).
+- **Code**: `read_ledger_view()` in `src/flathold/data/views/ledger_view.py`. Services/UI entrypoint: `get_ledger_view()` in `src/flathold/services/ledger_service.py`.
 
-That is where **calculated tags** are derived — tags that must **not** appear in persisted `transaction_tags` (see `tag_rules` validation). Calculated tags are **not** extra columns on a Delta table; they are computed in analytics and may appear as synthetic daily allocation rows or other long-form series. Current homes include modules under `src/flathold/analytics/allocations/`.
+### 2. Enhanced ledger
 
-**Analytic views**: named transforms on top of the enhanced ledger (or explicit frames derived from it) that return chart-ready or metric-ready Polars frames — e.g. daily allocations per tag, monthly rollups. Pages should consume these and apply only trivial operations (filter, date range, sum, mean); see `docs/architecture.md`.
+- **Definition**: The **analytic** layer that starts from the base ledger and adds **allocation-level** `transaction_tags` (long form: `id`, `tag`, `allocation`, …) plus **tag metadata** from `tag_definitions` (e.g. `calculated`, groups). **Calculated tags** are derived here — not as extra Delta columns, but as computed series (and, in future designs possibly other shapes) on read.
+- **Implementation today**:
+  - Long-form daily series `period`, `tag`, `allocation` from `daily_tag_allocations_long()` in `src/flathold/analytics/enhanced_ledger.py` (dashboard via `build_dashboard_allocation_long()` in `dashboard_views.py`).
+  - Per-row frame: `build_enhanced_ledger()` adds `calculated_tags: List[str]` per row from per-transaction remainders (e.g. `untagged-spend`, `uncategorised-sector`). Row-level `unknown-cash` is not included (monthly series only). **Stored** `tags` and **derived** `calculated_tags` stay separate.
+- **Not yet**: Merging calculated tag names into the `tags` list; synthetic rows (`virtual_txn_rows` in `enhanced_ledger.py`).
 
-## UI-specific presentation (not a view)
+### 3. Viewable ledger
 
-Some transformations exist only for display. For example, the View ledger page splits `tags` into:
-- “Counter Party” tags (based on tag group membership)
-- the rest under “Tags”
+- **Definition**: What the **View ledger** (and similar screens) **display** after **clarity-only** transforms: no new persisted or analytic facts, only presentation — e.g. splitting `tags` into **Counter Party** vs **Tags** using tag group metadata, column order, and styling.
+- **Code**: `get_enhanced_ledger()` in `src/flathold/services/ledger_service.py` (orchestration), then `src/flathold/ui/presenters/ledger_presenter.py` (`ledger_to_ledger_view`, etc.).
+- **Current vs target**: The **View ledger** page loads **enhanced** data via `get_enhanced_ledger()` then the viewable presenter. Further columns or presenter tweaks remain optional.
 
-These transformations should live under `src/flathold/ui/presenters/` (presentation-only), not in `data/views/`.
+### Analytic views (built on enhanced)
+
+**Analytic views** are named transforms on top of the enhanced ledger (or frames derived from it) that return chart-ready or metric-ready Polars outputs — e.g. pivoted daily series, monthly rollups. UI pages should consume these and apply only trivial operations (filter, date range, sum, mean); see `docs/architecture.md`.

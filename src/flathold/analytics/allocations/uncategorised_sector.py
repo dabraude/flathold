@@ -26,6 +26,16 @@ def _inclusive_day_spine(range_start: date, range_end: date) -> pl.DataFrame:
     return pl.DataFrame({"period": pl.date_range(rs, re, interval="1d", eager=True)})
 
 
+def per_transaction_uncategorised_sector_remainder(
+    ledger: pl.DataFrame,
+    tags_df: pl.DataFrame,
+    meta: Mapping[str, TagRuleMetadata],
+) -> pl.DataFrame:
+    """Per ``id``: sector uncategorised remainder (same basis as daily ``uncategorised-sector``)."""
+
+    return _per_transaction_uncategorised_sector(ledger, tags_df, meta)
+
+
 def _per_transaction_uncategorised_sector(
     ledger: pl.DataFrame,
     tags_df: pl.DataFrame,

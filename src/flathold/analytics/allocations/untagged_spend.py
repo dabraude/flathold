@@ -16,6 +16,18 @@ def _inclusive_day_spine(range_start: date, range_end: date) -> pl.DataFrame:
     return pl.DataFrame({"period": pl.date_range(rs, re, interval="1d", eager=True)})
 
 
+def per_transaction_untagged_remainder(
+    ledger: pl.DataFrame,
+    tags_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Per ``id``: ``abs_line`` minus sum of ``|allocation|`` (clamped at 0).
+
+    Same basis as the ``untagged-spend`` calculated daily series.
+    """
+
+    return _per_transaction_untagged(ledger, tags_df)
+
+
 def _per_transaction_untagged(ledger: pl.DataFrame, tags_df: pl.DataFrame) -> pl.DataFrame:
     """Per ``id``: ``abs_line`` minus sum of ``|allocation|`` (clamped at 0)."""
     line = ledger.unique(subset=["id"], keep="first").select(
