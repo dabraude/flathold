@@ -2,32 +2,33 @@
 
 from __future__ import annotations
 
+import importlib
+
 import polars as pl
 
 from flathold.core.tag_rule_metadata import TagRuleMetadata
-from flathold.data.tables.tag_definitions_table import (
-    ensure_tag_definitions_table,
-    read_tag_definitions_table,
-    read_tag_rule_metadata_map,
-    reset_tag_definitions_to_seed,
-)
+from flathold.data import tag_definitions_seed
+from flathold.data.tables import tag_definitions_table
 from flathold.tag_rules.rules import TAG_RULES
 
 
 def read_definitions_dataframe() -> pl.DataFrame:
-    return read_tag_definitions_table()
+    return tag_definitions_table.read_tag_definitions_table()
 
 
 def get_tag_rule_metadata_map() -> dict[str, TagRuleMetadata]:
-    return read_tag_rule_metadata_map()
+    return tag_definitions_table.read_tag_rule_metadata_map()
 
 
 def merge_seed_tags() -> None:
-    ensure_tag_definitions_table()
+    # Pick up code changes to TAG_DEFINITIONS_SEED_ROWS without requiring app restart.
+    importlib.reload(tag_definitions_seed)
+    importlib.reload(tag_definitions_table)
+    tag_definitions_table.ensure_tag_definitions_table()
 
 
 def reset_to_seed() -> None:
-    reset_tag_definitions_to_seed()
+    tag_definitions_table.reset_tag_definitions_to_seed()
 
 
 def rule_tag_names() -> set[str]:

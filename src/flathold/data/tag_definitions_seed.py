@@ -6,7 +6,7 @@ TAG_DEFINITIONS_SEED_ROWS: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("us", False, ()),
     ("pets", False, ()),
     ("groomer", False, ()),
-    ("insurance", False, ()),
+    ("insurance", False, ("sector-codes",)),
     ("david-life-insurance", False, ()),
     ("health-insurance", False, ()),
     ("vitality", False, ("counter-party",)),
@@ -65,7 +65,7 @@ TAG_DEFINITIONS_SEED_ROWS: tuple[tuple[str, bool, tuple[str, ...]], ...] = (
     ("cash-spend", False, ("cash-transactions",)),
     ("cash-withdrawal", False, ()),
     ("unknown-cash", False, ("cash-transactions",)),
-    ("untagged-spend", False, ()),
+    ("untagged-spend", False, ("sector-codes",)),
     ("uncategorised-sector", False, ("sector-codes",)),
 )
 

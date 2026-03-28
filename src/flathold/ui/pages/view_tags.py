@@ -6,7 +6,6 @@ import streamlit as st
 from flathold.services.tag_definitions_service import (
     merge_seed_tags,
     read_definitions_dataframe,
-    reset_to_seed,
     rule_tag_names,
 )
 
@@ -15,45 +14,25 @@ _INFO_TAG_PREVIEW = 20
 st.set_page_config(page_title="Tags", page_icon="🏷️", layout="wide")
 
 
-@st.dialog("Reset tag definitions")
-def _reset_tags_dialog() -> None:
-    st.warning(
-        "This **deletes** every row in `db/tag_definitions` and rebuilds the table from "
-        "`TAG_DEFINITIONS_SEED_ROWS` in code. Custom tags or edits are lost."
-    )
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Confirm reset", type="primary", width="stretch", key="reset_confirm"):
-            reset_to_seed()
-            st.session_state["_tags_just_reset"] = True
-            st.rerun()
-    with c2:
-        if st.button("Cancel", width="stretch", key="reset_cancel"):
-            st.rerun()
-
-
 with st.sidebar:
-    st.caption("Stored in `db/tag_definitions` (Delta). Seed rows merge when missing.")
+    st.caption("Stored in `db/tag_definitions` (Delta).")
     if st.button(
-        "Merge seed tags",
-        help="Append tags from the code seed that are not yet in the table.",
+        "Refresh seeds",
+        help=(
+            "Bring `db/tag_definitions` up to date with the code seed by adding any missing "
+            "seed tags."
+        ),
         key="tags_merge_seed",
         width="stretch",
     ):
         merge_seed_tags()
+        st.session_state["_tags_just_refreshed"] = True
         st.rerun()
-    if st.button(
-        "Reset tags to seed",
-        help="Remove all rows and rebuild from the code seed (destructive).",
-        key="tags_reset_seed",
-        width="stretch",
-    ):
-        _reset_tags_dialog()
 
 st.title("🏷️ Tags")
 
-if st.session_state.pop("_tags_just_reset", False):
-    st.success("Tag definitions were reset from the code seed.")
+if st.session_state.pop("_tags_just_refreshed", False):
+    st.success("Seed tags refreshed from code.")
 
 df = read_definitions_dataframe()
 rule_tags = rule_tag_names()
@@ -104,5 +83,5 @@ st.dataframe(
 
 st.caption(
     f"{len(display)} tag definition(s). Rules live in code; metadata is editable in "
-    "`db/tag_definitions` (or extend `TAG_DEFINITIONS_SEED_ROWS` and merge)."
+    "`db/tag_definitions`. Seed refresh adds any missing rows from `TAG_DEFINITIONS_SEED_ROWS`."
 )

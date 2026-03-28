@@ -73,7 +73,9 @@ def build_enhanced_ledger(
             pl.concat_list(
                 [
                     pl.when(pl.col("untagged") > 0).then(pl.lit(UNTAGGED_SPEND_TAG)),
-                    pl.when(pl.col("uncategorised") > 0).then(pl.lit(UNCATEGORISED_SECTOR_TAG)),
+                    pl.when((pl.col("untagged") <= 0) & (pl.col("uncategorised") > 0)).then(
+                        pl.lit(UNCATEGORISED_SECTOR_TAG)
+                    ),
                 ]
             )
             .list.drop_nulls()

@@ -11,6 +11,7 @@ from flathold.core.tag_group import TagGroup
 from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 LEDGER_VIEW_COUNTER_PARTY_COLUMN = "Counter Party"
+LEDGER_VIEW_SECTOR_CODES_COLUMN = "Sector codes"
 LEDGER_VIEW_TAGS_COLUMN = "Tags"
 LEDGER_VIEW_CALCULATED_TAGS_COLUMN = "Calculated tags"
 LEDGER_SOURCE_COLUMN = "ledger_source"
@@ -19,6 +20,11 @@ LEDGER_SOURCE_COLUMN = "ledger_source"
 def _counterparty_column_tag_names(tag_meta: Mapping[str, TagRuleMetadata]) -> frozenset[str]:
     """Tag names whose metadata includes the counter-party group."""
     return frozenset({name for name, m in tag_meta.items() if TagGroup.COUNTER_PARTY in m.groups})
+
+
+def _sector_codes_column_tag_names(tag_meta: Mapping[str, TagRuleMetadata]) -> frozenset[str]:
+    """Tag names whose metadata includes the sector-codes group."""
+    return frozenset({name for name, m in tag_meta.items() if TagGroup.SECTOR_CODES in m.groups})
 
 
 def _tag_groups_for_tag(tag: str, tag_meta: Mapping[str, TagRuleMetadata]) -> tuple[TagGroup, ...]:
@@ -41,7 +47,7 @@ def ledger_to_ledger_view(
     *,
     tag_meta: Mapping[str, TagRuleMetadata],
 ) -> pl.DataFrame:
-    """Split ``tags`` into ``Tags`` and ``Counter Party`` using tag definition groups."""
+    """Split ``tags`` into ``Counter Party``, ``Sector codes``, and ``Tags``."""
     has_calculated = CALCULATED_TAGS_COLUMN in ledger.columns
     calc_raw = ledger[CALCULATED_TAGS_COLUMN].to_list() if has_calculated else None
     work = ledger.drop(CALCULATED_TAGS_COLUMN) if has_calculated else ledger
@@ -56,20 +62,26 @@ def ledger_to_ledger_view(
 
     raw = work["tags"].to_list()
     other: list[list[str]] = []
+    sector_codes: list[list[str]] = []
     counter_party: list[list[str]] = []
+    sector_names = _sector_codes_column_tag_names(tag_meta)
     for cell in raw:
         if cell is None:
             other.append([])
+            sector_codes.append([])
             counter_party.append([])
             continue
         tags = [str(t) for t in cell]
         cp = [t for t in tags if TagGroup.COUNTER_PARTY in _tag_groups_for_tag(t, tag_meta)]
-        rest = [t for t in tags if TagGroup.COUNTER_PARTY not in _tag_groups_for_tag(t, tag_meta)]
+        sector = [t for t in tags if t in sector_names and t not in cp]
+        rest = [t for t in tags if t not in cp and t not in sector]
         other.append(rest)
+        sector_codes.append(sector)
         counter_party.append(cp)
 
     out = work.drop("tags").with_columns(
         pl.Series(LEDGER_VIEW_TAGS_COLUMN, other).cast(pl.List(pl.Utf8)),
+        pl.Series(LEDGER_VIEW_SECTOR_CODES_COLUMN, sector_codes).cast(pl.List(pl.Utf8)),
         pl.Series(LEDGER_VIEW_COUNTER_PARTY_COLUMN, counter_party).cast(pl.List(pl.Utf8)),
     )
     if has_calculated and calc_raw is not None:
@@ -80,24 +92,25 @@ def ledger_to_ledger_view(
 
 
 def reorder_ledger_view_columns(df: pl.DataFrame) -> pl.DataFrame:
-    """Order: ``id``, ``ledger_source``, counter party / tags / calculated, then the rest."""
+    """Order: ``id``, ``ledger_source``, split tag columns, then the rest."""
     cols = df.columns
     if "id" not in cols:
         return df
     cp = LEDGER_VIEW_COUNTER_PARTY_COLUMN
+    sector_col = LEDGER_VIEW_SECTOR_CODES_COLUMN
     tags_col = LEDGER_VIEW_TAGS_COLUMN
     calc_col = LEDGER_VIEW_CALCULATED_TAGS_COLUMN
     src = LEDGER_SOURCE_COLUMN
     head: list[str] = ["id"]
     if src in cols:
         head.append(src)
-    mid = [c for c in (cp, tags_col, calc_col) if c in cols]
+    mid = [c for c in (cp, sector_col, tags_col, calc_col) if c in cols]
     rest = [c for c in cols if c not in (*head, *mid)]
     return df.select([*head, *mid, *rest])
 
 
 def style_ledger_view_pandas(pdf: pd.DataFrame) -> Styler:
-    """Highlight counter party and calculated-tag columns for ``st.dataframe`` (Pandas Styler)."""
+    """Highlight split tag and calculated-tag columns for ``st.dataframe`` (Pandas Styler)."""
     styler = pdf.style
     if LEDGER_VIEW_COUNTER_PARTY_COLUMN in pdf.columns:
         styler = styler.set_properties(
@@ -105,6 +118,14 @@ def style_ledger_view_pandas(pdf: pd.DataFrame) -> Styler:
             **{
                 "background-color": "#e3f2fd",
                 "color": "#0d47a1",
+            },
+        )
+    if LEDGER_VIEW_SECTOR_CODES_COLUMN in pdf.columns:
+        styler = styler.set_properties(
+            subset=[LEDGER_VIEW_SECTOR_CODES_COLUMN],
+            **{
+                "background-color": "#e8f5e9",
+                "color": "#1b5e20",
             },
         )
     if LEDGER_VIEW_CALCULATED_TAGS_COLUMN in pdf.columns:

@@ -69,7 +69,9 @@ def test_enhanced_adds_empty_calculated_when_fully_tagged(
     assert out[CALCULATED_TAGS_COLUMN].to_list() == [[]]
 
 
-def test_enhanced_untagged_and_uncategorised_hints(sector_meta: dict[str, TagRuleMetadata]) -> None:
+def test_enhanced_prefers_untagged_over_uncategorised_hint(
+    sector_meta: dict[str, TagRuleMetadata],
+) -> None:
     ledger = pl.DataFrame([_ledger_row(id_="b", debit=50.0)])
     tags = pl.DataFrame(
         {
@@ -80,13 +82,61 @@ def test_enhanced_untagged_and_uncategorised_hints(sector_meta: dict[str, TagRul
         }
     )
     out = build_enhanced_ledger(ledger, tags, sector_meta)
-    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend", "uncategorised-sector"]]
+    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend"]]
 
 
 def test_enhanced_without_transaction_tags(sector_meta: dict[str, TagRuleMetadata]) -> None:
     ledger = pl.DataFrame([_ledger_row(id_="c", debit=30.0)])
     out = build_enhanced_ledger(ledger, None, sector_meta)
-    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend", "uncategorised-sector"]]
+    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend"]]
+
+
+def test_enhanced_uncategorised_when_fully_allocated_but_non_sector(
+    sector_meta: dict[str, TagRuleMetadata],
+) -> None:
+    ledger = pl.DataFrame([_ledger_row(id_="f", debit=50.0)])
+    tags = pl.DataFrame(
+        {
+            "id": ["f"],
+            "tag": ["other"],
+            "allocation": [50.0],
+            "counter_party": [False],
+        }
+    )
+    out = build_enhanced_ledger(ledger, tags, sector_meta)
+    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["uncategorised-sector"]]
+
+
+def test_enhanced_us_tag_excludes_uncategorised_sector(
+    sector_meta: dict[str, TagRuleMetadata],
+) -> None:
+    ledger = pl.DataFrame([_ledger_row(id_="d", debit=30.0)])
+    tags = pl.DataFrame(
+        {
+            "id": ["d"],
+            "tag": ["us"],
+            "allocation": [0.0],
+            "counter_party": [False],
+        }
+    )
+    out = build_enhanced_ledger(ledger, tags, sector_meta)
+    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend"]]
+
+
+def test_enhanced_cash_withdrawal_excludes_uncategorised_sector(
+    sector_meta: dict[str, TagRuleMetadata],
+) -> None:
+    ledger = pl.DataFrame([_ledger_row(id_="e", debit=30.0)])
+    tags = pl.DataFrame(
+        {
+            "id": ["e"],
+            "tag": ["cash-withdrawal"],
+            "allocation": [0.0],
+            "counter_party": [False],
+        }
+    )
+    out = build_enhanced_ledger(ledger, tags, sector_meta)
+    assert out[CALCULATED_TAGS_COLUMN].to_list() == [["untagged-spend"]]
 
 
 def test_enhanced_empty_ledger() -> None:

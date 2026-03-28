@@ -12,6 +12,7 @@ from flathold.core.tag_group import TagGroup
 from flathold.core.tag_rule_metadata import TagRuleMetadata
 
 UNCATEGORISED_SECTOR_TAG = "uncategorised-sector"
+_EXCLUDED_TAGS_FOR_UNCATEGORISED = frozenset({"us", "cash-withdrawal"})
 
 
 def _sector_tag_names(meta: Mapping[str, TagRuleMetadata]) -> frozenset[str]:
@@ -62,14 +63,31 @@ def _per_transaction_uncategorised_sector(
             tagged = sector_df.group_by("id").agg(
                 pl.col("allocation").abs().sum().alias("sector_tagged_abs")
             )
-    merged = line.join(tagged, on="id", how="left").with_columns(
-        pl.col("sector_tagged_abs").fill_null(0.0)
+    excluded_ids: pl.DataFrame
+    if len(tags_df) == 0:
+        excluded_ids = pl.DataFrame(schema={"id": pl.Utf8})
+    else:
+        excluded_ids = (
+            tags_df.filter(pl.col("tag").is_in(list(_EXCLUDED_TAGS_FOR_UNCATEGORISED)))
+            .select("id")
+            .unique()
+        )
+
+    merged = (
+        line.join(tagged, on="id", how="left")
+        .join(
+            excluded_ids.with_columns(pl.lit(True).alias("_exclude_uncategorised")),
+            on="id",
+            how="left",
+        )
+        .with_columns(pl.col("sector_tagged_abs").fill_null(0.0))
     )
     return merged.with_columns(
-        (pl.col("abs_line") - pl.col("sector_tagged_abs"))
-        .clip(lower_bound=0.0)
+        pl.when(pl.col("_exclude_uncategorised").fill_null(False))
+        .then(0.0)
+        .otherwise((pl.col("abs_line") - pl.col("sector_tagged_abs")).clip(lower_bound=0.0))
         .alias("uncategorised")
-    )
+    ).drop("_exclude_uncategorised")
 
 
 def monthly_uncategorised_sector_totals(
