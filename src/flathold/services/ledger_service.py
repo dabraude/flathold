@@ -1,4 +1,4 @@
-"""Read-only access to the base ledger view (orchestration boundary for UI)."""
+"""Ledger read paths for the UI: base ledger view and per-row enhanced ledger (orchestration)."""
 
 from __future__ import annotations
 

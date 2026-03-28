@@ -10,7 +10,7 @@ Data flows through **three** ledger concepts in order. Each step runs **when** s
 
 | Order | Ledger | When it is produced | What happens |
 |------|--------|---------------------|--------------|
-| 1 | **Base** | Whenever code calls `read_ledger_view()` (or `get_ledger_view()`). | **Read** bank and manual Delta tables, **union** rows (`ledger_source` = `bank` \| `manual`), **left-join** aggregated **stored** tags from `transaction_tags` into `tags: List[str]` per `id`. **Calculated tags are not** in this frame. |
+| 1 | **Base** | Whenever code calls `read_ledger_view()` (or `get_ledger_view()`). | **Read** bank and manual Delta tables, **union** rows (`ledger_source` = `bank` \| `manual`), **left-join** aggregated **stored** tags from `transaction_tags` into `tags: List[str]` per `id`. **Calculated tags are not** in this frame. (The implementation also **ensures** a `tag_definitions` table exists via `ensure_tag_definitions_table()` — see `docs/data-model.md`.) |
 | 2 | **Enhanced** | When analytics needs rule + calculated behaviour (e.g. dashboard allocations, future ledger enrichment). | Start from base ledger **plus** long-form `transaction_tags` (allocations) **plus** tag metadata from `tag_definitions`. **Derive calculated tags** and combined allocation series in memory (e.g. `daily_tag_allocations_long` in `analytics/enhanced_ledger.py`). **No** Delta write; validation still forbids persisting calculated tags on `transaction_tags`. |
 | 3 | **Viewable** | When the UI (or a presenter) prepares a frame for display. | Apply **clarity-only** transforms: split `tags` into **Counter Party** vs **Tags** using tag groups, reorder columns, styling — **no** new source of truth. Current page input is the **enhanced** ledger (or a projection of it). |
 
@@ -36,7 +36,7 @@ Data flows through **three** ledger concepts in order. Each step runs **when** s
 
 - Defining every calculated tag rule (covered by analytics / tag rule modules).
 - Persisting calculated tags (explicitly forbidden on `transaction_tags`).
-- Replacing the long-form allocation pipeline used by the dashboard (that remains the primary enhanced output until a wide “enhanced ledger table” exists).
+- Replacing the dashboard’s long-form allocation pipeline (`build_dashboard_allocation_long`, chart/metric series). That pipeline stays the right shape for dashboard analytics; the **View ledger** screen uses the **per-row** enhanced ledger (`build_enhanced_ledger`) plus the presenter — the two are complementary, not a single table replacing the other.
 
 ## References
 

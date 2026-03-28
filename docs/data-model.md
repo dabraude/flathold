@@ -31,6 +31,8 @@ Derived views must live in `src/flathold/data/views/`. They are **not a source o
    - left join onto the base ledger on `id`
    - missing tags become `[]`
 
+**Side effect on read:** `read_ledger_view()` calls `ensure_tag_definitions_table()` first so a `tag_definitions` Delta table exists when other code expects it. That is persistence maintenance bundled with the ledger read path, not part of the logical union/join above.
+
 #### `id` semantics
 - **Bank-derived ledger rows**: `id` is stored on the **`bank` Delta table** and is deterministic from the bank row content (same formula as before, now persisted at ingest). The ledger view reads that `id` when building bank-derived rows.
 - **Manual ledger rows**: `id` is generated once and stored (e.g. prefixed `manual-...`); it must be stable across runs.
@@ -51,7 +53,8 @@ These names describe **how far derived** the data is: persisted facts plus store
 - **Implementation today**:
   - Long-form daily series `period`, `tag`, `allocation` from `daily_tag_allocations_long()` in `src/flathold/analytics/enhanced_ledger.py` (dashboard via `build_dashboard_allocation_long()` in `dashboard_views.py`).
   - Per-row frame: `build_enhanced_ledger()` adds `calculated_tags: List[str]` per row from per-transaction remainders (e.g. `untagged-spend`, `uncategorised-sector`). Row-level `unknown-cash` is not included (monthly series only). **Stored** `tags` and **derived** `calculated_tags` stay separate.
-- **Not yet**: Merging calculated tag names into the `tags` list; synthetic rows (`virtual_txn_rows` in `enhanced_ledger.py`).
+- **Not yet**: Merging calculated tag names into the `tags` list.
+- **Synthetic rows:** `daily_tag_allocations_long(..., virtual_txn_rows=...)` in `enhanced_ledger.py` **concatenates** a non-empty `virtual_txn_rows` frame into the long-form daily series. Nothing in the app supplies that argument yet; per-row `build_enhanced_ledger()` does not add synthetic transactions.
 
 ### 3. Viewable ledger
 
